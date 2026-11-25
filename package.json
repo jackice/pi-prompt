@@ -1,0 +1,48 @@
+{
+  "name": "@jackice/pi-prompt",
+  "version": "0.1.0",
+  "description": "OMP-style single-line status band and borderless composer for Pi, with native editor behaviour preserved.",
+  "type": "module",
+  "license": "MIT",
+  "author": "jackice",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jackice/pi-prompt.git"
+  },
+  "main": "./index.ts",
+  "types": "./index.ts",
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "files": [
+    "index.ts",
+    "src",
+    "README.md",
+    "CHANGELOG.md",
+    "docs"
+  ],
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "gallery": "tsx examples/gallery.ts",
+    "bench": "tsx scripts/bench.ts"
+  },
+  "dependencies": {
+    "@jackice/pi-ui": "^0.5.0"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "1.6.0",
+    "@earendil-works/pi-tui": "1.6.0",
+    "@types/node": "^24.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  }
+}

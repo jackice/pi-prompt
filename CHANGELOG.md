@@ -1,0 +1,14 @@
+# Changelog
+
+## 0.1.0
+
+- 新增 OMP 风格单行状态带：替换原生 editor 顶边、移除底边，保留原生输入/补全/光标。
+- 新增 `╰─ ` 前缀、多行续行 gutter、合并 `↑N ↓M` 滚动提示。
+- 新增 `band` / `borderless` / `native` 三种 preset；默认 native footer 完整保留。
+- 新增配置 schema、安全默认值、一次性诊断与 ASCII 校验。
+- 新增 Session 文件 usage ledger（五类 entry，与原生 footer 同口径）、Context、live token rate、异步 Git provider。
+- 新增分段：brand/model/path/git/session/context/token/cache/rate/cost/time/workflow/subagents/extension_statuses。
+- 新增 `/prompt-ui status|refresh|preset`。
+- 使用 `@jackice/pi-ui@^0.5.0` 的 `SegmentBar`、`InlineGauge`、`renderSeparator`。
+- 真实 Pi 1.6.0 PTY 冒烟：band/borderless/native、ASCII、非法配置回退、多行滚动、preset 热切换、reload、窄/宽 resize、原生 footer A/B。
+- `footerMode=replace` 仅实验：默认关闭，未完成逐字段 parity。
