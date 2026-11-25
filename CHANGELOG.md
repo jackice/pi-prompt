@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.1
+
+- Add `footerMode=compact`: one custom footer line with path/branch, context, and model.
+- Add `footerMode=hidden`: zero-line footer via the official empty footer component.
+- Keep `footerMode=native` as the default; `/reload` restores the built-in footer in Pi 1.6.0, with restart as the safe fallback.
+- Add footer rendering and config tests; 68 tests pass.
+
 ## 0.1.0
 
 - 新增 OMP 风格单行状态带：替换原生 editor 顶边、移除底边，保留原生输入/补全/光标。

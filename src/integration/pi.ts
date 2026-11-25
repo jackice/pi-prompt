@@ -22,7 +22,7 @@ import {
 } from "../config.ts";
 import { BandEditor } from "../composer/native-editor.ts";
 import { resolveShape } from "../composer/shapes.ts";
-import { PromptFooter } from "../footer.ts";
+import { EmptyFooter, PromptFooter } from "../footer.ts";
 import { buildBandSegments } from "../segments.ts";
 import { GitProvider, toGitFacts, type GitExec, type GitStatus } from "../status/git.ts";
 import type { ContextFacts, PromptFacts, UsageFacts } from "../status/facts.ts";
@@ -202,8 +202,11 @@ export class PromptExtension {
       return;
     }
 
-    if (this.config.footerMode === "replace") {
-      const message = "pi-prompt: footerMode=replace 仍是实验模式，原生 footer 字段尚未逐项 parity 验收。";
+    const footerMode = this.config.footerMode;
+    if (footerMode !== "native") {
+      const message = footerMode === "replace"
+        ? "pi-prompt: footerMode=replace 仍是实验模式，原生 footer 字段尚未逐项 parity 验收；切回 native 可 /reload（Pi 1.6.0 已验证）或重启。"
+        : `pi-prompt: footerMode=${footerMode} 使用自定义 footer；切回 native 可 /reload（Pi 1.6.0 已验证）或重启。`;
       if (!this.notified.has(message)) {
         this.notified.add(message);
         ctx.ui.notify(message, "warning");
@@ -227,7 +230,7 @@ export class PromptExtension {
     this.refreshData(ctx, runtime);
 
     if (this.config.shape !== "native") this.installEditor(runtime);
-    if (this.config.footerMode === "replace") this.installFooter(runtime);
+    if (this.config.footerMode !== "native") this.installFooter(runtime);
     if (usesGit(this.config)) this.startGit(runtime);
     if (usesClockSegment(this.config) || this.config.clock.enabled) {
       runtime.scheduler.requestNow();
@@ -286,13 +289,17 @@ export class PromptExtension {
   }
 
   private installFooter(runtime: Runtime): void {
+    const mode = runtime.config.footerMode;
     runtime.ctx.ui.setFooter((tui, theme, footerData) => {
       runtime.tui = tui;
       runtime.footerData = footerData;
+      if (mode === "hidden") {
+        return new EmptyFooter();
+      }
       const footer = new PromptFooter(theme, {
         facts: () => runtime.store.get(),
         config: () => runtime.config,
-      }, footerData);
+      }, footerData, { lines: mode === "compact" ? 1 : 2 });
       runtime.footer = footer;
       const unsubscribe = footerData.onBranchChange(() => {
         footer.invalidate();

@@ -25,6 +25,18 @@ describe("config", () => {
     expect(usesGit(config)).toBe(true);
   });
 
+  it("compact/hidden 接受模式并沿用 native 分段默认", () => {
+    for (const footerMode of ["compact", "hidden"] as const) {
+      const { config, hardError } = resolveConfig({ footerMode });
+      expect(hardError).toBe(false);
+      expect(config.footerMode).toBe(footerMode);
+      expect(config.segments.left).toEqual(["brand", "model"]);
+      expect(config.segments.right).toEqual(["token_rate"]);
+      expect(config.git.enabled).toBe(false);
+      expect(config.cost.enabled).toBe(false);
+    }
+  });
+
   it("显式覆盖 mode 默认", () => {
     const { config } = resolveConfig({
       footerMode: "replace",

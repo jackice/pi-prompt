@@ -40,10 +40,26 @@ pi-prompt 不调用 `setFooter`，`provider` 引用始终为 null。原生 foote
 - 实现存在，可显式启用，但**未通过 parity**。
 - 缺失：CH%、`(auto)`、routed model/effort、`xp`、`(sub)`；这些字段没有任何可伪造的公开来源。
 - 因此首版默认不启用，也不宣称替代原生 footer。启动时会发出一次性实验 warning。
-- 允许的使用方式仅限开发/验收；完整 native preset 需重启才能恢复原生 footer。
+- 允许的使用方式仅限开发/验收；切回 native preset 可 `/reload`（Pi 1.6.0 已验证）或重启。
 
 ## 4. 生命周期说明
 
 - native：不安装 footer bridge，无 provider 引用、无订阅、无 epoch。
-- replace：`setFooter` factory 只捕获只读 `footerData`；`onBranchChange` 订阅由 footer dispose 释放。
+- compact/replace：`setFooter` factory 捕获只读 `footerData`；`onBranchChange` 订阅由 footer dispose 释放。
+- hidden：安装零行 `EmptyFooter`，不订阅分支变化。
 - 宿主 reload/switch 会先恢复内置 footer；pi-prompt 不会在运行时 `setFooter(undefined)` 盲清其他扩展的 footer。
+
+## 5. 自定义 footer 模式（0.1.1）
+
+| 模式 | 行数 | 内容 | 恢复原生 |
+|---|---:|---|---|
+| `native` | 2–3 | Pi 内置 FooterComponent，字段最完整 | 无需操作 |
+| `compact` | 1 | path(branch) • 扩展/context/model/cost（0 隐藏） | `/reload` 或重启 |
+| `replace` | 2 | 第一行 path/branch/session；第二行 tokens/cache/cost/context/model | `/reload` 或重启 |
+| `hidden` | 0 | 零行 EmptyFooter | `/reload` 或重启 |
+
+- `compact`/`hidden` 沿用 native 的分段默认，不自动启用 Git/cost。
+- 三种自定义模式会替换原生 footer；不宣称字段等价。`replace` 仍是实验模式。
+- Pi 1.6.0 PTY 已验证：hidden 无 footer；compact 单行；切回 native 后 `/reload` 恢复内置 footer 两行。
+- 其他 Pi 版本或自定义 footer owner 场景仍以重启为安全回滚路径。
+

@@ -12,15 +12,27 @@ export interface PromptFooterSource {
   config(): PromptConfig;
 }
 
+export interface PromptFooterOptions {
+  /** 1 = compact single line; 2 = replace-style path/stats lines. */
+  lines?: 1 | 2;
+}
+
 export class PromptFooter implements Component {
   private readonly theme: Theme;
   private readonly source: PromptFooterSource;
   private readonly footerData: ReadonlyFooterDataProvider;
+  private readonly lines: 1 | 2;
 
-  constructor(theme: Theme, source: PromptFooterSource, footerData: ReadonlyFooterDataProvider) {
+  constructor(
+    theme: Theme,
+    source: PromptFooterSource,
+    footerData: ReadonlyFooterDataProvider,
+    options: PromptFooterOptions = {},
+  ) {
     this.theme = theme;
     this.source = source;
     this.footerData = footerData;
+    this.lines = options.lines ?? 2;
   }
 
   invalidate(): void {}
@@ -62,6 +74,19 @@ export class PromptFooter implements Component {
       parts.push(`${middleTruncate(facts.model.name ?? facts.model.id, 20)}${thinking}`);
     }
     const second = parts.join(" ");
+    if (this.lines === 1) {
+      const combined = [first, ...parts].filter((part) => part.length > 0).join(" • ");
+      return [ui.fg("muted", truncate(combined, width))];
+    }
     return [ui.fg("muted", truncate(first, width)), ui.fg("muted", truncate(second, width))];
+  }
+}
+
+/** 显式隐藏 footer：官方允许零行 footer component。 */
+export class EmptyFooter implements Component {
+  invalidate(): void {}
+
+  render(): string[] {
+    return [];
   }
 }

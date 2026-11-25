@@ -57,6 +57,9 @@
 | 非法 ASCII 配置 | 一次性 warning，回退安全默认 `φ`/`╰─ ` |
 | footer A/B | 未安装扩展与 native 模式下 footer 两行逐字一致（空模型/空 session 状态） |
 | replace 模式 | 输出两行实验 footer；启动时明确 warning，未通过 parity |
+| hidden 模式 | 仅 band + 输入行，零 footer；启动 warning |
+| compact 模式 | 单行 `cwd • context • model`，无原生 footer |
+| custom → native | `/reload` 后恢复内置两行 footer（Pi 1.6.0） |
 
 ## 5. 未验证 / 风险
 

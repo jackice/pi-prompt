@@ -30,7 +30,7 @@ export type SegmentId = keyof typeof SEGMENT_PRIORITIES;
 export type PromptShapeId = "band" | "borderless" | "native";
 export type SeparatorName = "ascii" | "pipe" | "slash" | "dot" | "none";
 export type IconMode = "unicode" | "ascii";
-export type FooterMode = "native" | "replace";
+export type FooterMode = "native" | "replace" | "compact" | "hidden";
 export type GitRefreshMode = "event" | "manual" | "poll";
 
 export interface PromptConfig {
@@ -116,7 +116,9 @@ const REPLACE_BASE: PromptConfig = {
 };
 
 export function defaultConfig(footerMode: FooterMode = "native"): PromptConfig {
-  return clone(footerMode === "replace" ? REPLACE_BASE : NATIVE_BASE);
+  const config = clone(footerMode === "replace" ? REPLACE_BASE : NATIVE_BASE);
+  config.footerMode = footerMode;
+  return config;
 }
 
 function clone<T>(value: T): T {
@@ -230,8 +232,16 @@ function mergeBase(footerMode: FooterMode, raw: Record<string, unknown>, errors:
     else errors.push("icons 必须是 unicode|ascii");
   }
   if (raw.footerMode !== undefined) {
-    if (raw.footerMode === "native" || raw.footerMode === "replace") config.footerMode = raw.footerMode;
-    else errors.push("footerMode 必须是 native|replace");
+    if (
+      raw.footerMode === "native" ||
+      raw.footerMode === "replace" ||
+      raw.footerMode === "compact" ||
+      raw.footerMode === "hidden"
+    ) {
+      config.footerMode = raw.footerMode;
+    } else {
+      errors.push("footerMode 必须是 native|replace|compact|hidden");
+    }
   }
   if (raw.prefix !== undefined) {
     if (typeof raw.prefix !== "string") errors.push("prefix 必须是字符串");
@@ -323,9 +333,21 @@ export function resolveConfig(raw: unknown): ResolvedConfig {
   }
   const errors: string[] = [];
   const footerMode: FooterMode =
-    raw.footerMode === "replace" ? "replace" : raw.footerMode === "native" ? "native" : "native";
-  if (raw.footerMode !== undefined && raw.footerMode !== "native" && raw.footerMode !== "replace") {
-    errors.push("footerMode 必须是 native|replace");
+    raw.footerMode === "replace"
+      ? "replace"
+      : raw.footerMode === "compact"
+        ? "compact"
+        : raw.footerMode === "hidden"
+          ? "hidden"
+          : "native";
+  if (
+    raw.footerMode !== undefined &&
+    raw.footerMode !== "native" &&
+    raw.footerMode !== "replace" &&
+    raw.footerMode !== "compact" &&
+    raw.footerMode !== "hidden"
+  ) {
+    errors.push("footerMode 必须是 native|replace|compact|hidden");
   }
   const config = mergeBase(footerMode, raw, errors);
   const hardError = errors.some((message) => !message.includes("（已忽略）"));
