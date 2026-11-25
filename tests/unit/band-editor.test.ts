@@ -53,7 +53,7 @@ describe("BandEditor", () => {
     const editor = createEditor();
     editor.setText("hello");
     const rows = editor.render(40);
-    expect(rows[0]).toBe("~/dev/pi-prompt");
+    expect(rows[0]).toBe(`${" ".repeat(25)}~/dev/pi-prompt`);
     expect(rows[1]).toBe("φ > GPT high   2% ───────── 500K");
     expect(rows[2]?.startsWith("╰─ ")).toBe(true);
     expect(rows.join("\n")).toContain("hello");
@@ -88,7 +88,7 @@ describe("BandEditor", () => {
     const editor = createEditor("status", 24, "╰─ ", "Session title", "↑1K ↓500");
     editor.setText("draft");
     expect(editor.render(60).map((row) => stripTerminalSequences(row).trimEnd())).toEqual([
-      "Session title", "status", "↑1K ↓500", "╰─ draft",
+      `${" ".repeat(47)}Session title`, "status", "↑1K ↓500", "╰─ draft",
     ]);
     const result = editor.handleMouse(event({ x: 3, y: 2 }));
     expect(result).toEqual({ handled: true, focus: true });

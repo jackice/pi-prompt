@@ -65,6 +65,7 @@ describe("composeFrame", () => {
   it("运行提示优先，标题靠右且不会超出宽度", () => {
     expect(alignHeading("left", "right", 20)).toBe(`left${" ".repeat(11)}right`);
     expect(alignHeading("", "right", 10)).toBe("     right");
+    expect(alignHeading("", "标题", 4)).toBe("标题");
     expect(alignHeading("left", "", 10)).toBe("left");
     expect(displayWidth(alignHeading("l".repeat(20), "r".repeat(20), 10))).toBeLessThanOrEqual(10);
   });

@@ -8,7 +8,7 @@ Working…                                                     Session title
 ╰─ your input
 ```
 
-- The example uses `footerMode: "none"`. When idle, the top row shows the session title or working directory.
+- The example uses `footerMode: "none"`. The session title (or working directory for unnamed sessions) stays right-aligned when idle and during activity. Native activity appears on the left and takes priority in narrow terminals.
 - `footerMode: "native"` is the default. Pi's own footer follows the input with no fixed blank row between them.
 - The editor still handles the cursor, autocomplete, history, undo, paste, attachments, IME, and mouse input.
 

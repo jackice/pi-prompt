@@ -1,6 +1,5 @@
 import { CustomEditor, type KeybindingsManager } from "@earendil-works/pi-coding-agent";
 import { CURSOR_MARKER, type EditorTheme, type TuiMouseEvent, type TuiMouseEventResult, type TUI } from "@earendil-works/pi-tui";
-import { displayWidth } from "@jackice/pi-ui";
 
 import { alignHeading, choosePrefix, composeFrame, type FrameResult } from "./frame.ts";
 
@@ -48,9 +47,7 @@ export class BandEditor extends CustomEditor {
   }
 
   private renderHeading(title: string, width: number): string {
-    if (!this.workingStatus) return title;
-    const working = this.workingStatus.renderInBorder(width);
-    return displayWidth(working) > 0 ? alignHeading(working, title, width) : title;
+    return alignHeading(this.workingStatus?.renderInBorder(width) ?? "", title, width);
   }
 
   protected override renderTopBorder(width: number, hiddenLineCount: number): string {

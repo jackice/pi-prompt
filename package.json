@@ -1,6 +1,6 @@
 {
   "name": "@jackice/pi-prompt",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "OMP-style activity and status above Pi's native input, with no fixed blank row below.",
   "type": "module",
   "license": "MIT",

@@ -35,10 +35,12 @@ export function choosePrefix(
 
 export function alignHeading(left: string, right: string, width: number): string {
   const primary = truncate(left, width);
-  const remaining = width - displayWidth(primary);
-  if (!right || remaining < 2) return primary;
-  const title = truncate(right, remaining - 1);
-  return primary + " ".repeat(remaining - displayWidth(title)) + title;
+  const used = displayWidth(primary);
+  const remaining = width - used;
+  const gap = used > 0 ? 1 : 0;
+  if (!right || remaining <= gap) return primary;
+  const title = truncate(right, remaining - gap);
+  return (gap ? primary : "") + " ".repeat(remaining - displayWidth(title)) + title;
 }
 
 export interface NativeCapture {

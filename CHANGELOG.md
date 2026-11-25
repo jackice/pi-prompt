@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.1
+
+- Keep the session title or working directory right-aligned when idle. Activity stays on the left and takes priority in narrow terminals.
+
 ## 0.2.0
 
 - Stack Pi's native activity indicator, session title, and configurable status above the editor in both `band` and `borderless`.
