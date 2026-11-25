@@ -44,6 +44,7 @@ describe("config", () => {
     expect(config.segments.left).toEqual(["brand", "model"]);
     expect(config.segments.right).toEqual(["token_rate"]);
     expect(config.metaSegments).toEqual(["path", "git", "session", "cost"]);
+    expect(usesGit(config)).toBe(true);
   });
 
   it("metaSegments 过滤未知、重复与 context", () => {

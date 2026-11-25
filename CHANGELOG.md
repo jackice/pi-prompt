@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.3
+
+- In `footerMode=inline`, the meta row falls back to Pi's footer branch and starts the async Git provider when `metaSegments` contains `git`.
+- Branch changes from the footer provider invalidate the meta cache.
+- 83 tests pass; no config changes.
+
 ## 0.1.2
 
 - Add `footerMode=inline`: zero footer plus one `metaSegments` line inside Pi's reserved editor row. The composer stays 3 rows with no blank line.

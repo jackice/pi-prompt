@@ -421,7 +421,12 @@ export function loadConfig(path: string): LoadedConfig {
 
 /** 配置是否要求启动 Git provider。 */
 export function usesGit(config: PromptConfig): boolean {
-  return config.git.enabled || config.segments.left.includes("git") || config.segments.right.includes("git");
+  return (
+    config.git.enabled ||
+    config.segments.left.includes("git") ||
+    config.segments.right.includes("git") ||
+    (config.footerMode === "inline" && config.metaSegments.includes("git"))
+  );
 }
 
 export function usesClockSegment(config: PromptConfig): boolean {

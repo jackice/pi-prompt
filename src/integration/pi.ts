@@ -7,6 +7,7 @@ import {
   type ExtensionCommandContext,
   type ExtensionContext,
   type KeybindingsManager,
+  type ReadonlyFooterDataProvider,
   type Theme,
 } from "@earendil-works/pi-coding-agent";
 import type { EditorComponent, EditorTheme, TUI } from "@earendil-works/pi-tui";
@@ -45,7 +46,7 @@ interface Runtime {
   configRevision: number;
   factory?: EditorFactoryFn | undefined;
   footer?: PromptFooter | undefined;
-  footerData?: { getExtensionStatuses(): ReadonlyMap<string, string>; onBranchChange(cb: () => void): () => void } | undefined;
+  footerData?: ReadonlyFooterDataProvider | undefined;
   tui?: TUI | undefined;
   theme?: Theme | undefined;
   uiTheme: UiTheme;
@@ -465,11 +466,15 @@ export class PromptExtension {
     const statusesKey = statuses
       ? [...statuses.entries()].map(([key, value]) => `${key}=${value}`).sort().join("\u0000")
       : "";
-    const key = `${width}|${facts.revision}|${runtime.configRevision}|${runtime.themeVersion}|${runtime.config.metaSegments.join(",")}|${statusesKey}`;
+    const branch = facts.git?.branch ?? runtime.footerData?.getGitBranch() ?? undefined;
+    const metaFacts = facts.git || !branch
+      ? facts
+      : { ...facts, git: { branch, stale: false } };
+    const key = `${width}|${facts.revision}|${runtime.configRevision}|${runtime.themeVersion}|${runtime.config.metaSegments.join(",")}|${branch ?? ""}|${statusesKey}`;
     if (runtime.metaCache?.key === key) return runtime.metaCache.line;
 
     const meta = buildMetaSegments({
-      facts,
+      facts: metaFacts,
       config: runtime.config,
       theme: runtime.uiTheme,
       hostname: runtime.hostname,
