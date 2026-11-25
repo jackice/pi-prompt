@@ -1,45 +1,41 @@
 # @jackice/pi-prompt
 
-OMP 风格的单行状态带 + 无边框输入区，保留 Pi 原生编辑器行为与原生 footer。
+An OMP-style single-line status band and borderless prompt area for Pi, while preserving the native editor and native footer.
 
 ```text
 φ > GPT-6.2 high 2% ━──────────────────────────────── 500K 41t/s
-╰─ 你的输入
+╰─ your input
 ~/dev/pi-prompt (develop) • session
 ↑18k ↓4.6k R219k W1.2k CH92% 2%/500K (auto)    GPT-6.2 high
 ```
 
-- 状态带只有一行；普通输入不再出现上下横线。
-- 光标、补全、历史、撤销、粘贴、附件、IME 与鼠标坐标仍由原生 `Editor` 处理。
-- 默认 `footerMode=native`：不调用 `setFooter`，原生 footer 的 2–3 行完整保留。
-- 默认 `Native Compact` 只显示 brand、model/thinking、context gauge，以及可信 live 速率。
+- The band is exactly one line; normal input no longer has top/bottom borders.
+- Cursor, autocomplete, history, undo, paste, attachments, IME, and mouse coordinates stay in the native `Editor`.
+- `footerMode=native` by default: `setFooter` is never called and the native 2–3 line footer is kept intact.
+- The default Native Compact layout shows only brand, model/thinking, the context gauge, and a trustworthy live token rate.
 
-## 兼容性
+## Compatibility
 
-| 组件 | 已验证版本 |
+| Component | Verified version |
 |---|---|
 | Pi | 1.6.0 |
 | Node | v25.9.0 |
 | `@jackice/pi-ui` | 0.5.0 |
-| 平台 | macOS arm64（Ghostty/tmux PTY 冒烟） |
+| Platform | macOS arm64 (Ghostty/tmux PTY smoke test) |
 
-只使用 Pi 公开 API：`CustomEditor`、`protected renderTopBorder/renderBottomBorder`、`setEditorComponent`、`getContextUsage`、`sessionManager.getEntries`、footer data provider。没有私有字段、Reflect、deep import 或 monkey patch。
+Only public Pi APIs are used: `CustomEditor`, `protected renderTopBorder/renderBottomBorder`, `setEditorComponent`, `getContextUsage`, `sessionManager.getEntries`, and the footer data provider. No private fields, `Reflect`, deep imports, or monkey patching.
 
-## 安装
-
-发布前使用本地路径或 tarball：
+## Installation
 
 ```bash
-pi install /absolute/path/to/pi-prompt
-# 或
 pi install npm:@jackice/pi-prompt
 ```
 
-依赖 `@jackice/pi-ui@^0.5.0` 作为普通 dependency，避免 Pi 安装器不安装 peer dependency 导致加载失败。发布顺序必须先 pi-ui 0.5.0，再 pi-prompt。
+`@jackice/pi-ui@^0.5.0` is a regular dependency so the Pi installer resolves it automatically. A peer dependency would not be installed by the Pi installer and would make the extension fail to load.
 
-## 配置
+## Configuration
 
-默认读取 `${PI_CODING_AGENT_DIR:-~/.pi/agent}/pi-prompt.json`。缺失或非法配置时使用安全默认值，并一次性提示错误。
+The default config path is `${PI_CODING_AGENT_DIR:-~/.pi/agent}/pi-prompt.json`. Missing or invalid config falls back to safe defaults and reports the errors once.
 
 ```json
 {
@@ -68,67 +64,67 @@ pi install npm:@jackice/pi-prompt
 }
 ```
 
-- `shape`: `band` | `native` | `borderless`。`native` 不安装自定义 editor/footer。
-- `icons=ascii` 时 prefix/brand 必须是 ASCII，分隔符与 gauge 使用 ASCII glyph。
-- `footerMode=replace` 仍是实验模式：需要独立 parity 验收，默认禁止用于生产。
-- 未在 `segments` 中列出的数据不会启动采集；Git provider 只在配置了 `git` 段或 `git.enabled=true` 时启动。
+- `shape`: `band`, `native`, or `borderless`. `native` installs no custom editor or footer.
+- With `icons=ascii`, the prefix and brand must be ASCII; separators and gauge use ASCII glyphs.
+- `footerMode=replace` is still experimental and requires a separate parity review. It is disabled by default for production use.
+- Data sources that are not listed in `segments` are not collected. The Git provider only starts when a `git` segment is configured or `git.enabled=true`.
 
-### 分段
+### Segments
 
-| ID | 说明 |
+| ID | Description |
 |---|---|
-| `brand` | 配置的品牌文本 |
-| `hostname` | 8 列内主机名，超长中间省略 |
-| `model` | 模型名 + thinking level |
-| `path` | cwd；`~` 缩写，带 compact/min |
-| `git` | 分支 + dirty 标记；非 repo 隐藏 |
-| `session` | 会话名称或短 ID |
-| `workflow` / `subagents` | 通过 `extensionStatusKeys` 映射的扩展状态 |
-| `extension_statuses` | 未映射扩展状态聚合 |
-| `token_in` / `token_out` / `token_total` | 全 Session 文件累计 |
-| `cache_read` / `cache_write` | 全 Session 文件累计 |
-| `token_rate` | 仅 streaming 期间可信 live 速率 |
-| `elapsed` | 当前响应耗时 |
-| `cost` | `$` = provider 计费，`≈$` = 目录估算 |
-| `time` | 时钟，需显式配置或 `clock.enabled` |
+| `brand` | Configured brand text |
+| `hostname` | Hostname clipped to 8 columns, middle-truncated |
+| `model` | Model name plus thinking level |
+| `path` | cwd with `~` shortening and compact/min variants |
+| `git` | Branch plus dirty marker; hidden outside a repo |
+| `session` | Session name or short ID |
+| `workflow` / `subagents` | Extension statuses mapped through `extensionStatusKeys` |
+| `extension_statuses` | Aggregated unmapped extension statuses |
+| `token_in` / `token_out` / `token_total` | Session-file totals |
+| `cache_read` / `cache_write` | Session-file totals |
+| `token_rate` | Live output rate while streaming and trustworthy |
+| `elapsed` | Duration of the current response |
+| `cost` | `$` for provider-billed cost, `≈$` for catalog estimate |
+| `time` | Clock; requires explicit config or `clock.enabled` |
 
-`context` 不是左右分段 ID，而是中央弹性 gauge。
+`context` is not a left/right segment ID. It is the elastic center gauge.
 
-## 命令
+## Commands
 
-- `/prompt-ui status`：当前 owner、preset、配置路径、模型/context/usage/git、已知缺失字段。
-- `/prompt-ui refresh`：手动刷新状态与 Git。
-- `/prompt-ui preset band|native|borderless`：运行时仅切换 editor；`footerMode=replace` 下完整 native 需重启。
+- `/prompt-ui status`: current owner, preset, config path, model/context/usage/git, and known gaps.
+- `/prompt-ui refresh`: refresh state and Git on demand.
+- `/prompt-ui preset band|native|borderless`: switch the editor at runtime. With `footerMode=replace`, a full native preset requires a restart.
 
-## 数据语义
+## Data semantics
 
-- **usage**：`session_file` 口径，当前 Session 文件所有分支的五类持久化 entry（`usage`、assistant message、toolResult、`branch_summary`、`compaction`），与 Pi 1.6.0 原生 footer 一致。不是账户累计，也不是当前分支累计。
-- **context**：只来自 `ctx.getContextUsage()`；未知显示 `?`，不猜测。
-- **token_rate**：当前响应累计 output tokens ÷ 单调时长；不可信时隐藏。
-- **git**：异步 `git --no-optional-locks status --porcelain=v2 -z --branch`，2s 超时，最多 1 个子进程 + 1 次合并 pending。外部修改不会实时推送，需下次事件或 `/prompt-ui refresh`。
-- 默认零定时轮询、零新增 LLM 请求、零 token 消耗。
+- **usage**: `session_file` scope. All persisted entries of the current session file across all branches, using the same five entry classes as the Pi 1.6.0 native footer (`usage`, assistant message, toolResult, `branch_summary`, and `compaction`). It is not an account total and not a current-branch total.
+- **context**: only from `ctx.getContextUsage()`. Unknown is rendered as `?`; nothing is guessed.
+- **token_rate**: accumulated output tokens for the current response divided by monotonic time. Hidden when not trustworthy.
+- **git**: asynchronous `git --no-optional-locks status --porcelain=v2 -z --branch`, 2 s timeout, at most one child process plus one merged pending refresh. External changes are visible on the next event or `/prompt-ui refresh`.
+- No periodic polling by default, no extra LLM requests, and no extra token usage.
 
-## 回退与共存
+## Fallback and coexistence
 
-- `shape=native` 是完整原生回退（不安装 editor，不替换 footer）。
-- 运行时 `/prompt-ui preset native` 只回退 editor；已替换 footer 时必须重启。
-- 检测到其他扩展已接管 editor 时拒绝覆盖并提示。旧 Powerline 与 pi-prompt 的活动 editor/footer 必须互斥；仅安装但不加载允许。
-- 不使用私有容器排序；TODO/Goal/Subagent/审批 widget 由 Pi 原生管理。
+- `shape=native` is the full native fallback (no editor, no footer replacement).
+- `/prompt-ui preset native` only reverts the editor. If the footer was replaced, restart Pi.
+- If another extension already owns the editor, pi-prompt refuses to take over and reports it. The old Powerline and pi-prompt must not both own the active editor/footer. Installing without loading is allowed.
+- Pi's native widgets (TODO, Goal, Subagent, approval) remain managed by Pi.
 
-## 已知限制
+## Known limitations
 
-- `footerMode=replace` 未完成原生 footer 逐字段 parity，未知字段包括 `(auto)`、CH%、routed model/effort、`xp`、`(sub)`；该模式默认关闭，不宣称等价。
-- 真实中文 IME、宽字符、鼠标选择仍需 Ghostty/tmux 手工验收；PTY 冒烟覆盖普通输入、多行、滚动、preset、reload、窄/宽 resize。
-- 外部 Git 修改不会主动触发刷新。
-- 不实现队列、stash、sticky bash、delayed send、welcome 等旧 Powerline 附加功能。
+- `footerMode=replace` has not passed field-by-field parity with the native footer. Missing fields include `(auto)`, CH%, routed model/effort, `xp`, and `(sub)`. The mode is off by default and must not be described as equivalent.
+- Real CJK IME, wide characters, and mouse selection still need manual Ghostty/tmux verification. PTY smoke tests cover normal input, multi-line drafts, scrolling, presets, reload, and narrow/wide resizes.
+- External Git changes do not trigger a refresh by themselves.
+- Legacy Powerline extras such as queue, stash, sticky bash, delayed send, and welcome are not implemented.
 
-## 开发
+## Development
 
 ```bash
-npx vitest run        # 单元测试
-npx tsc --noEmit      # 类型检查
+npx vitest run
+npx tsc -p tsconfig.json --noEmit
 npx tsx examples/gallery.ts
 npx tsx scripts/bench.ts
 ```
 
-详细证据见 `docs/implementation-status.md`、`docs/compatibility.md`、`docs/footer-parity.md`、`docs/performance.md`、`docs/migration.md`。
+Evidence lives in `docs/implementation-status.md`, `docs/compatibility.md`, `docs/footer-parity.md`, `docs/performance.md`, and `docs/migration.md`.
