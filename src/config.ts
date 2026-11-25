@@ -30,7 +30,7 @@ export type SegmentId = keyof typeof SEGMENT_PRIORITIES;
 export type PromptShapeId = "band" | "borderless" | "native";
 export type SeparatorName = "ascii" | "pipe" | "slash" | "dot" | "none";
 export type IconMode = "unicode" | "ascii";
-export type FooterMode = "native" | "replace" | "compact" | "hidden" | "inline";
+export type FooterMode = "native" | "none";
 export type GitRefreshMode = "event" | "manual" | "poll";
 
 export interface PromptConfig {
@@ -43,8 +43,8 @@ export interface PromptConfig {
   brand: { text: string };
   footerMode: FooterMode;
   segments: { left: SegmentId[]; right: SegmentId[] };
-  /** inline 模式的 editor 第 3 行；不影响 native/compact/hidden/replace。 */
   metaSegments: SegmentId[];
+  detailSegments: SegmentId[];
   extensionStatusKeys: Record<string, string>;
   context: {
     enabled: boolean;
@@ -81,7 +81,8 @@ const NATIVE_BASE: PromptConfig = {
   brand: { text: "φ" },
   footerMode: "native",
   segments: { left: ["brand", "model"], right: ["token_rate"] },
-  metaSegments: ["path", "git", "session", "cost"],
+  metaSegments: [],
+  detailSegments: [],
   extensionStatusKeys: {},
   context: { enabled: true, style: "embedded", warning: 70, critical: 90 },
   git: {
@@ -96,30 +97,8 @@ const NATIVE_BASE: PromptConfig = {
   cost: { enabled: false },
 };
 
-const REPLACE_BASE: PromptConfig = {
-  ...NATIVE_BASE,
-  footerMode: "replace",
-  segments: {
-    left: ["brand", "model", "path", "git", "session"],
-    right: [
-      "token_rate",
-      "token_in",
-      "token_out",
-      "cache_read",
-      "cache_write",
-      "cost",
-      "workflow",
-      "subagents",
-      "extension_statuses",
-    ],
-  },
-  extensionStatusKeys: { workflow: "jackice:workflow", subagents: "jackice:subagents" },
-  git: { ...NATIVE_BASE.git, enabled: true },
-  cost: { enabled: true },
-};
-
 export function defaultConfig(footerMode: FooterMode = "native"): PromptConfig {
-  const config = clone(footerMode === "replace" ? REPLACE_BASE : NATIVE_BASE);
+  const config = clone(NATIVE_BASE);
   config.footerMode = footerMode;
   return config;
 }
@@ -180,7 +159,7 @@ function sanitizePrefix(
 function parseSegments(
   raw: unknown,
   fallback: SegmentId[],
-  side: "left" | "right",
+  field: string,
   seen: Set<string>,
   errors: string[],
 ): SegmentId[] {
@@ -189,52 +168,21 @@ function parseSegments(
     return [...fallback];
   }
   if (!Array.isArray(raw)) {
-    errors.push(`segments.${side} 必须是字符串数组`);
+    errors.push(`${field} 必须是字符串数组`);
     return [...fallback];
   }
   const result: SegmentId[] = [];
   for (const item of raw) {
     if (typeof item !== "string") {
-      errors.push(`segments.${side} 含非字符串项`);
+      errors.push(`${field} 含非字符串项`);
       continue;
     }
-    if (!(item in SEGMENT_PRIORITIES)) {
-      errors.push(`未知 segment: ${item}（已忽略）`);
-      continue;
-    }
-    if (seen.has(item)) {
-      errors.push(`重复 segment: ${item}（已忽略）`);
-      continue;
-    }
-    seen.add(item);
-    result.push(item as SegmentId);
-  }
-  return result;
-}
-
-function parseMetaSegments(
-  raw: unknown,
-  fallback: SegmentId[],
-  errors: string[],
-): SegmentId[] {
-  if (raw === undefined) return [...fallback];
-  if (!Array.isArray(raw)) {
-    errors.push("metaSegments 必须是字符串数组");
-    return [...fallback];
-  }
-  const seen = new Set<string>();
-  const result: SegmentId[] = [];
-  for (const item of raw) {
-    if (typeof item !== "string") {
-      errors.push("metaSegments 含非字符串项");
-      continue;
-    }
-    if (!(item in SEGMENT_PRIORITIES)) {
-      errors.push(`metaSegments 未知 segment: ${item}（已忽略）`);
+    if (!Object.hasOwn(SEGMENT_PRIORITIES, item)) {
+      errors.push(`${field} 未知 segment: ${item}（已忽略）`);
       continue;
     }
     if (seen.has(item)) {
-      errors.push(`metaSegments 重复 segment: ${item}（已忽略）`);
+      errors.push(`${field} 重复 segment: ${item}（已忽略）`);
       continue;
     }
     seen.add(item);
@@ -265,19 +213,6 @@ function mergeBase(footerMode: FooterMode, raw: Record<string, unknown>, errors:
     if (raw.icons === "unicode" || raw.icons === "ascii") config.icons = raw.icons;
     else errors.push("icons 必须是 unicode|ascii");
   }
-  if (raw.footerMode !== undefined) {
-    if (
-      raw.footerMode === "native" ||
-      raw.footerMode === "replace" ||
-      raw.footerMode === "compact" ||
-      raw.footerMode === "hidden" ||
-      raw.footerMode === "inline"
-    ) {
-      config.footerMode = raw.footerMode;
-    } else {
-      errors.push("footerMode 必须是 native|replace|compact|hidden|inline");
-    }
-  }
   if (raw.prefix !== undefined) {
     if (typeof raw.prefix !== "string") errors.push("prefix 必须是字符串");
     else {
@@ -300,10 +235,11 @@ function mergeBase(footerMode: FooterMode, raw: Record<string, unknown>, errors:
   const segments = isRecord(raw.segments) ? raw.segments : {};
   const seen = new Set<string>();
   config.segments = {
-    left: parseSegments(segments.left, config.segments.left, "left", seen, errors),
-    right: parseSegments(segments.right, config.segments.right, "right", seen, errors),
+    left: parseSegments(segments.left, config.segments.left, "segments.left", seen, errors),
+    right: parseSegments(segments.right, config.segments.right, "segments.right", seen, errors),
   };
-  config.metaSegments = parseMetaSegments(raw.metaSegments, config.metaSegments, errors);
+  config.metaSegments = parseSegments(raw.metaSegments, [], "metaSegments", new Set(), errors);
+  config.detailSegments = parseSegments(raw.detailSegments, [], "detailSegments", new Set(), errors);
 
   if (raw.extensionStatusKeys !== undefined) {
     if (!isRecord(raw.extensionStatusKeys)) {
@@ -368,25 +304,14 @@ export function resolveConfig(raw: unknown): ResolvedConfig {
     };
   }
   const errors: string[] = [];
-  const footerMode: FooterMode =
-    raw.footerMode === "replace"
-      ? "replace"
-      : raw.footerMode === "compact"
-        ? "compact"
-        : raw.footerMode === "hidden"
-          ? "hidden"
-          : raw.footerMode === "inline"
-            ? "inline"
-            : "native";
-  if (
-    raw.footerMode !== undefined &&
-    raw.footerMode !== "native" &&
-    raw.footerMode !== "replace" &&
-    raw.footerMode !== "compact" &&
-    raw.footerMode !== "hidden" &&
-    raw.footerMode !== "inline"
-  ) {
-    errors.push("footerMode 必须是 native|replace|compact|hidden|inline");
+  const footerMode = raw.footerMode === "none" ? "none" : "native";
+  if (raw.footerMode !== undefined && raw.footerMode !== "native" && raw.footerMode !== "none") {
+    if (raw.footerMode === "inline" || raw.footerMode === "compact" ||
+        raw.footerMode === "replace" || raw.footerMode === "hidden") {
+      errors.push(`footerMode=${raw.footerMode} 已移除；请改为 footerMode: "none"，并按 README 配置状态字段`);
+    } else {
+      errors.push("footerMode 必须是 native|none");
+    }
   }
   const config = mergeBase(footerMode, raw, errors);
   const hardError = errors.some((message) => !message.includes("（已忽略）"));
@@ -425,10 +350,13 @@ export function usesGit(config: PromptConfig): boolean {
     config.git.enabled ||
     config.segments.left.includes("git") ||
     config.segments.right.includes("git") ||
-    (config.footerMode === "inline" && config.metaSegments.includes("git"))
+    (config.footerMode === "none" &&
+      (config.metaSegments.includes("git") || config.detailSegments.includes("git")))
   );
 }
 
 export function usesClockSegment(config: PromptConfig): boolean {
-  return config.clock.enabled || config.segments.left.includes("time") || config.segments.right.includes("time");
+  return config.clock.enabled || config.segments.left.includes("time") || config.segments.right.includes("time") ||
+    (config.footerMode === "none" &&
+      (config.metaSegments.includes("time") || config.detailSegments.includes("time")));
 }

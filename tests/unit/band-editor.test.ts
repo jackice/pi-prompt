@@ -1,23 +1,20 @@
 import { displayWidth } from "@jackice/pi-ui";
-import { CURSOR_MARKER } from "@earendil-works/pi-tui";
+import { CURSOR_MARKER, stripTerminalSequences } from "@earendil-works/pi-tui";
 import type { EditorTheme, TUI, TuiMouseEvent } from "@earendil-works/pi-tui";
 import type { KeybindingsManager } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
 
 import { BandEditor } from "../../src/composer/native-editor.ts";
-import { resolveShape } from "../../src/composer/shapes.ts";
-import { defaultConfig } from "../../src/config.ts";
-
-const config = defaultConfig("native");
-const shape = resolveShape(config);
 
 function createEditor(
   status = "φ > GPT high   2% ───────── 500K",
   rows = 24,
   prefix = "╰─ ",
-  meta?: string | (() => string),
+  title: string | (() => string) = "~/dev/pi-prompt",
+  detail?: string,
 ) {
   const tui = {
+    mode: "fullscreen",
     terminal: { rows, columns: 80 },
     requestRender: () => {},
   } as unknown as TUI;
@@ -27,11 +24,8 @@ function createEditor(
   } as unknown as EditorTheme;
   const keybindings = { matches: () => false } as unknown as KeybindingsManager;
   return new BandEditor(tui, theme, keybindings, {
-    renderStatus: () => status,
-    ...(meta === undefined
-      ? {}
-      : { renderMeta: typeof meta === "function" ? meta : () => meta }),
-    shape: () => ({ ...shape, firstPrefix: prefix }),
+    renderBands: () => ({ status, detail }),
+    renderTitle: typeof title === "function" ? title : () => title,
     prefix: () => prefix,
     ascii: () => false,
   });
@@ -59,8 +53,9 @@ describe("BandEditor", () => {
     const editor = createEditor();
     editor.setText("hello");
     const rows = editor.render(40);
-    expect(rows[0]).toBe("φ > GPT high   2% ───────── 500K");
-    expect(rows[1]?.startsWith("╰─ ")).toBe(true);
+    expect(rows[0]).toBe("~/dev/pi-prompt");
+    expect(rows[1]).toBe("φ > GPT high   2% ───────── 500K");
+    expect(rows[2]?.startsWith("╰─ ")).toBe(true);
     expect(rows.join("\n")).toContain("hello");
     expect(rows.some((row) => row === "─".repeat(40))).toBe(false);
     expect(rows.some((row) => row.includes("\u0000pi-prompt"))).toBe(false);
@@ -89,27 +84,18 @@ describe("BandEditor", () => {
     }
   });
 
-  it("meta 行占满 reserved 行，空闲共 3 行", () => {
-    const editor = createEditor("status", 24, "╰─ ", "~/dev/pi-prompt (develop)");
-    editor.setText("");
-    const rows = editor.render(60);
-    expect(rows).toHaveLength(3);
-    expect(rows[0]).toBe("status");
-    expect(rows[1]?.startsWith("╰─")).toBe(true);
-    expect(rows[2]).toBe("~/dev/pi-prompt (develop)");
-    expect(editor.getFrame()?.mapping[2]?.kind).toBe("meta");
-  });
-
-  it("点击 meta 行只聚焦，不移动正文光标", () => {
-    const editor = createEditor("status", 24, "╰─ ", "meta");
-    editor.setText("hello");
-    editor.render(40);
+  it("详情仅在有内容时额外占一行，输入仍是最后一行", () => {
+    const editor = createEditor("status", 24, "╰─ ", "Session title", "↑1K ↓500");
+    editor.setText("draft");
+    expect(editor.render(60).map((row) => stripTerminalSequences(row).trimEnd())).toEqual([
+      "Session title", "status", "↑1K ↓500", "╰─ draft",
+    ]);
     const result = editor.handleMouse(event({ x: 3, y: 2 }));
     expect(result).toEqual({ handled: true, focus: true });
     expect(editor.getCursor()).toEqual({ line: 0, col: 5 });
   });
 
-  it("meta 渲染异常或换行时回退原生 render", () => {
+  it("标题渲染异常或换行时回退原生 render", () => {
     const throwing = createEditor("status", 24, "╰─ ", () => {
       throw new Error("boom");
     });
@@ -122,8 +108,8 @@ describe("BandEditor", () => {
     expect(newline.render(40)[0]).toBe("─".repeat(40));
   });
 
-  it("meta 行不超出宿主宽度", () => {
-    const editor = createEditor("status", 24, "╰─ ", "x".repeat(100));
+  it("标题和详情都不超出宿主宽度", () => {
+    const editor = createEditor("status", 24, "╰─ ", "x".repeat(100), "y".repeat(100));
     editor.setText("x");
     const rows = editor.render(30);
     for (const row of rows) {
@@ -131,10 +117,12 @@ describe("BandEditor", () => {
     }
   });
 
-  it("无 meta 时保持 2 行", () => {
-    const editor = createEditor();
+  it("空详情不占行，输入下方没有固定空白", () => {
+    const editor = createEditor("status", 24, "╰─ ", "~/dev/pi-prompt", "");
     editor.setText("hello");
-    expect(editor.render(40)).toHaveLength(2);
+    const rows = editor.render(40);
+    expect(rows).toHaveLength(3);
+    expect(stripTerminalSequences(rows[2] ?? "").trimEnd()).toBe("╰─ hello");
   });
 
   it("长草稿滚动时显示一行合并隐藏计数", () => {
@@ -149,8 +137,20 @@ describe("BandEditor", () => {
     const editor = createEditor();
     editor.setText("hello world");
     editor.render(40);
-    const result = editor.handleMouse(event({ x: 6, y: 1 }));
+    const result = editor.handleMouse(event({ x: 6, y: 2 }));
     expect(result).toEqual({ handled: true, focus: true });
+    expect(editor.getCursor()).toEqual({ line: 0, col: 3 });
+  });
+
+  it.each([
+    { height: 3, screenY: 2 },
+    { height: 4, screenY: 3 },
+  ])("全屏裁剪顶部后可点击输入（height=$height）", ({ height, screenY }) => {
+    const editor = createEditor("status", 4, "╰─ ", "Session title", "↑1K ↓500");
+    editor.focused = true;
+    editor.setText("hello world");
+    editor.render(40);
+    editor.handleMouse(event({ x: 6, y: 2, height, screenY }));
     expect(editor.getCursor()).toEqual({ line: 0, col: 3 });
   });
 
@@ -158,7 +158,7 @@ describe("BandEditor", () => {
     const editor = createEditor();
     editor.setText("hello");
     editor.render(40);
-    const result = editor.handleMouse(event({ x: 0, y: 1 }));
+    const result = editor.handleMouse(event({ x: 0, y: 2 }));
     expect(result).toEqual({ handled: true, focus: true });
     expect(editor.getCursor()).toEqual({ line: 0, col: 5 });
   });
@@ -191,6 +191,6 @@ describe("BandEditor", () => {
     const editor = createEditor("x".repeat(200));
     editor.setText("a");
     const rows = editor.render(40);
-    expect(displayWidth(rows[0] ?? "")).toBeLessThanOrEqual(40);
+    expect(displayWidth(rows[1] ?? "")).toBeLessThanOrEqual(40);
   });
 });

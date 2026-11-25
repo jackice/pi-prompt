@@ -2,7 +2,7 @@ import { plainTheme } from "@jackice/pi-ui";
 import { describe, expect, it } from "vitest";
 
 import { defaultConfig, type PromptConfig } from "../../src/config.ts";
-import { buildBandSegments, buildMetaSegments } from "../../src/segments.ts";
+import { buildBandSegments } from "../../src/segments.ts";
 import { createFacts, type PromptFacts } from "../../src/status/facts.ts";
 
 function facts(patch: Partial<PromptFacts> = {}): PromptFacts {
@@ -115,54 +115,41 @@ describe("band segments", () => {
     expect(built.right[2]?.full.text).toBe("todo: 3/5");
   });
 
-  it("session 使用名称，否则使用短 ID", () => {
+  it("会话段显示短 ID，不重复顶部会话标题", () => {
     const config = makeConfig({ segments: { left: ["session"], right: [] } });
     const named = build(config, facts({ session: { cwd: "/x", name: "status band", id: "abcdef123456" } }));
-    expect(named.left[0]?.full.text).toBe("status band");
-    const unnamed = build(config, facts({ session: { cwd: "/x", id: "abcdef123456" } }));
-    expect(unnamed.left[0]?.full.text).toBe("session abcdef12");
+    expect(named.left[0]?.full.text).toBe("abcdef12");
   });
 
-  it("inline meta 按 builder 分组并隐藏缺失数据", () => {
+  it("none 合并元信息并将显式详情放在独立一行，不重复字段", () => {
     const config = makeConfig({
-      footerMode: "inline",
+      footerMode: "none",
+      segments: { left: ["brand", "path"], right: ["token_rate"] },
       metaSegments: ["path", "git", "session", "cost"],
+      detailSegments: ["path", "token_out", "cost"],
       cost: { enabled: true },
     });
-    const built = buildMetaSegments(
-      {
-        ...base,
-        config,
-        facts: facts({
-          session: { cwd: "/Users/jackice/dev/pi-prompt", id: "abcdef123456" },
-          git: { branch: "develop", staged: 0, unstaged: 1, untracked: 0, stale: false },
-          usage: { costTotal: 0.42, costFromProvider: true, scope: "session_file" },
-        }),
-      },
-      config.metaSegments,
-    );
-    expect(built.left.map((segment) => segment.id)).toEqual(["path", "git", "session"]);
-    expect(built.right.map((segment) => segment.id)).toEqual(["cost"]);
-    expect(built.left[0]?.full.text).toBe("~/dev/pi-prompt");
-    expect(built.left[1]?.full.text).toBe("develop*");
-    expect(built.right[0]?.full.text).toBe("$0.420");
+    const built = build(config, facts({
+      session: { cwd: "/Users/jackice/dev/pi-prompt", id: "abcdef123456" },
+      git: { branch: "develop", staged: 0, unstaged: 1, untracked: 0, stale: false },
+      usage: { output: 500, costTotal: 0.42, costFromProvider: true, scope: "session_file" },
+    }));
+    expect(built.left.map((segment) => segment.id)).toEqual(["brand", "path", "git", "session"]);
+    expect(built.right).toEqual([]);
+    expect(built.left[1]?.full.text).toBe("~/dev/pi-prompt");
+    expect(built.left[2]?.full.text).toBe("develop*");
+    expect(built.detail?.right.map((segment) => segment.full.text)).toEqual(["↓500", "$0.420"]);
   });
 
-  it("inline meta 在非 repo、cost 为零时只保留 path/session", () => {
+  it("在非 repo、cost 为零且详情无可显示数据时不增加一行", () => {
     const config = makeConfig({
-      footerMode: "inline",
+      footerMode: "none",
       metaSegments: ["path", "git", "session", "cost"],
+      detailSegments: ["token_out"],
     });
-    const built = buildMetaSegments(
-      {
-        ...base,
-        config,
-        facts: facts({ session: { cwd: "/Users/jackice/dev/pi-prompt", id: "abcdef123456" }, usage: { costTotal: 0, costFromProvider: false, scope: "session_file" } }),
-      },
-      config.metaSegments,
-    );
-    expect(built.left.map((segment) => segment.id)).toEqual(["path", "session"]);
-    expect(built.right).toEqual([]);
+    const built = build(config, facts({ session: { cwd: "/x", id: "abcdef123456" } }));
+    expect(built.left.map((segment) => segment.id)).toEqual(["brand", "path", "session"]);
+    expect(built.detail).toBeUndefined();
   });
 
   it("time 段仅在显式配置或 clock 启用时出现", () => {

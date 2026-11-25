@@ -1,18 +1,16 @@
 # @jackice/pi-prompt
 
-An OMP-style single-line status band and borderless prompt area for Pi, while preserving the native editor and native footer.
+An OMP-style composer for Pi: activity and session status above the native input, with no reserved blank line below it.
 
 ```text
-φ > GPT-6.2 high 2% ━──────────────────────────────── 500K 41t/s
+Working…                                                     Session title
+φ > GPT-6.2 high > ~/dev/pi-prompt > develop > 01a20bd5  2% ───── 500K
 ╰─ your input
-~/dev/pi-prompt (develop) • session
-↑18k ↓4.6k R219k W1.2k CH92% 2%/500K (auto)    GPT-6.2 high
 ```
 
-- The band is exactly one line; normal input no longer has top/bottom borders.
-- Cursor, autocomplete, history, undo, paste, attachments, IME, and mouse coordinates stay in the native `Editor`.
-- `footerMode=native` by default: `setFooter` is never called and the native 2–3 line footer is kept intact. `footerMode=inline` removes the footer and reuses Pi's reserved editor row for one meta line, keeping the composer at 3 rows with no blank line.
-- The default Native Compact layout shows only brand, model/thinking, the context gauge, and a trustworthy live token rate.
+- The example uses `footerMode: "none"`. When idle, the top row shows the session title or working directory.
+- `footerMode: "native"` is the default. Pi's own footer follows the input with no fixed blank row between them.
+- The editor still handles the cursor, autocomplete, history, undo, paste, attachments, IME, and mouse input.
 
 ## Compatibility
 
@@ -23,7 +21,7 @@ An OMP-style single-line status band and borderless prompt area for Pi, while pr
 | `@jackice/pi-ui` | 0.5.0 |
 | Platform | macOS arm64 (Ghostty/tmux PTY smoke test) |
 
-Only public Pi APIs are used: `CustomEditor`, `protected renderTopBorder/renderBottomBorder`, `setEditorComponent`, `getContextUsage`, `sessionManager.getEntries`, and the footer data provider. No private fields, `Reflect`, deep imports, or monkey patching.
+The extension uses Pi's public editor hooks, native activity indicator, `setEditorComponent`, `getContextUsage`, and session APIs. Only `footerMode: "none"` calls `setFooter`, to install a zero-row component. No private fields, `Reflect`, deep imports, or monkey patching.
 
 ## Installation
 
@@ -51,7 +49,8 @@ The default config path is `${PI_CODING_AGENT_DIR:-~/.pi/agent}/pi-prompt.json`.
     "left": ["brand", "model"],
     "right": ["token_rate"]
   },
-  "metaSegments": ["path", "git", "session", "cost"],
+  "metaSegments": [],
+  "detailSegments": [],
   "context": { "enabled": true, "style": "embedded", "warning": 70, "critical": 90 },
   "git": {
     "enabled": false,
@@ -65,11 +64,38 @@ The default config path is `${PI_CODING_AGENT_DIR:-~/.pi/agent}/pi-prompt.json`.
 }
 ```
 
-- `shape`: `band`, `native`, or `borderless`. `native` installs no custom editor or footer.
-- `footerMode`: `native` keeps Pi's built-in 2–3 line footer; `compact` replaces it with one custom line; `replace` uses two custom lines and remains experimental; `hidden` removes the footer entirely; `inline` removes the footer and puts one `metaSegments` line into the editor row Pi already reserves, so the composer stays 3 rows with no blank line. In Pi 1.6.0, `/reload` restores the native footer after a mode change; restarting Pi is the safe fallback.
-- With `icons=ascii`, the prefix and brand must be ASCII; separators and gauge use ASCII glyphs.
-- `footerMode=replace` is still experimental and requires a separate parity review. It is disabled by default for production use.
-- Data sources that are not listed in `segments` are not collected. The Git provider only starts when a `git` segment is configured or `git.enabled=true`.
+- `shape`: `band` and `borderless` use the same stacked layout with different input prefixes. `native` leaves the Pi editor unchanged; `footerMode` is independent.
+- `footerMode`: `native` keeps Pi's built-in footer and all its fields; `none` removes it. Set `none` to keep the input as the last row when no completion menu or other extension widget is open. After changing this setting, use `/reload` in Pi 1.6.0 or restart Pi.
+- `segments.left` and `segments.right` select the main status band's fields. With `footerMode: "none"`, `metaSegments` merges fields into that band, and `detailSegments` puts fields on a separate line above the input. The detail line is omitted when none of its fields can be displayed. A field appears once: explicitly placed main-band fields take priority, then detail fields, then metadata.
+- With `icons=ascii`, the prefix and brand must be ASCII; separators and the gauge use ASCII glyphs.
+- The Git provider starts only when a `git` segment is in use or `git.enabled` is `true`.
+
+### Upgrading from 0.1.x
+
+Before updating, replace removed `footerMode` values with `"none"`:
+
+| Old value | Settings to preserve the information you want |
+|---|---|
+| `hidden` | Set `metaSegments` to `[]` if the old config specified it. The old `hidden` mode ignored this list. |
+| `inline` | Keep `metaSegments`. If it was implicit, set `["path", "git", "session", "cost"]`. |
+| `compact` | Set `metaSegments` to `["path", "git", "session", "token_in", "token_out", "cache_read", "cache_write", "cost"]`. Model and context are already in the default band. |
+| `replace` | Use the recipe below for the old defaults. Keep your existing explicit segment and status-key overrides where needed. |
+
+For `replace` with no custom field overrides:
+
+```json
+{
+  "footerMode": "none",
+  "metaSegments": ["path", "git", "session", "workflow", "subagents", "extension_statuses"],
+  "detailSegments": ["token_in", "token_out", "cache_read", "cache_write", "cost"],
+  "extensionStatusKeys": { "workflow": "jackice:workflow", "subagents": "jackice:subagents" },
+  "cost": { "enabled": true }
+}
+```
+
+If you already placed a field in `segments`, remove it there to move it to the detail row. Keep any explicit `cost.enabled` override.
+
+`native` does not change. The extension warns on old values rather than silently reinterpreting them. See [migration and rollback](docs/migration.md).
 
 ### Segments
 
@@ -80,7 +106,7 @@ The default config path is `${PI_CODING_AGENT_DIR:-~/.pi/agent}/pi-prompt.json`.
 | `model` | Model name plus thinking level |
 | `path` | cwd with `~` shortening and compact/min variants |
 | `git` | Branch plus dirty marker; hidden outside a repo |
-| `session` | Session name or short ID |
+| `session` | Short session ID; the title is in the top row |
 | `workflow` / `subagents` | Extension statuses mapped through `extensionStatusKeys` |
 | `extension_statuses` | Aggregated unmapped extension statuses |
 | `token_in` / `token_out` / `token_total` | Session-file totals |
@@ -94,9 +120,9 @@ The default config path is `${PI_CODING_AGENT_DIR:-~/.pi/agent}/pi-prompt.json`.
 
 ## Commands
 
-- `/prompt-ui status`: current owner, preset, config path, model/context/usage/git, and known gaps.
+- `/prompt-ui status`: current owner, editor preset, footer mode, config path, and data sources.
 - `/prompt-ui refresh`: refresh state and Git on demand.
-- `/prompt-ui preset band|native|borderless`: switch the editor at runtime. With `footerMode=replace`, a full native preset requires a restart.
+- `/prompt-ui preset band|native|borderless`: switch the editor at runtime without changing `footerMode`.
 
 ## Data semantics
 
@@ -108,15 +134,14 @@ The default config path is `${PI_CODING_AGENT_DIR:-~/.pi/agent}/pi-prompt.json`.
 
 ## Fallback and coexistence
 
-- `shape=native` is the full native fallback (no editor, no footer replacement).
-- `/prompt-ui preset native` only reverts the editor. If the footer was replaced, restart Pi.
+- For a fully native layout, set `shape: "native"` and `footerMode: "native"`.
+- `/prompt-ui preset native` only reverts the editor. To restore the footer, set `footerMode: "native"` and reload or restart.
 - If another extension already owns the editor, pi-prompt refuses to take over and reports it. The old Powerline and pi-prompt must not both own the active editor/footer. Installing without loading is allowed.
 - Pi's native widgets (TODO, Goal, Subagent, approval) remain managed by Pi.
 
 ## Known limitations
 
-- `footerMode=replace` has not passed field-by-field parity with the native footer. Missing fields include `(auto)`, CH%, routed model/effort, `xp`, and `(sub)`. The mode is off by default and must not be described as equivalent.
-- `footerMode=compact` intentionally drops token counts and the native `(auto)`/`(sub)`/CH%/routed-model fields to fit one line. `footerMode=hidden` leaves Pi's reserved editor row blank; use `footerMode=inline` to fill it with `metaSegments` without adding height.
+- With `footerMode: "none"`, the configured band is not a replica of the native footer. Use `native` for fields such as CH%, subscription status, and routed model/effort.
 - Real CJK IME, wide characters, and mouse selection still need manual Ghostty/tmux verification. PTY smoke tests cover normal input, multi-line drafts, scrolling, presets, reload, and narrow/wide resizes.
 - External Git changes do not trigger a refresh by themselves.
 - Legacy Powerline extras such as queue, stash, sticky bash, delayed send, and welcome are not implemented.

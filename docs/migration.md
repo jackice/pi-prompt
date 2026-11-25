@@ -1,4 +1,20 @@
-# 迁移与回滚（旧 Powerline → pi-prompt）
+# 迁移与回滚
+
+## 从 0.1.x 升级到 0.2.0
+
+先编辑 `${PI_CODING_AGENT_DIR:-~/.pi/agent}/pi-prompt.json`，再运行 `pi update npm:@jackice/pi-prompt` 并重启 Pi。
+
+| 0.1.x | 0.2.0 |
+|---|---|
+| `native` | 不改配置。保留原生底栏，输入与底栏之间不留固定空行。 |
+| `hidden` | 改为 `none`。旧配置里的 `metaSegments` 曾被忽略，若有设置请改成 `[]`。 |
+| `inline` | 改为 `none`，保留 `metaSegments`；原来未显式配置时可补 `["path", "git", "session", "cost"]`。 |
+| `compact` | 改为 `none`，把 `path`、`git`、`session`、`token_in`、`token_out`、`cache_read`、`cache_write`、`cost` 按需加到 `metaSegments`；默认状态带已含模型和上下文。 |
+| `replace` | 改为 `none`，参照[英文 README 的默认字段示例](../README.md#upgrading-from-01x)：保留导航、workflow/subagents 映射和扩展状态，把用量与成本放在 `detailSegments`。若同一字段已经在 `segments` 中，从那里移除才会显示在详情行。保留显式成本开关。 |
+
+旧值不继续执行；Pi 会显示迁移警告。首次加载非法配置使用安全默认，改好后 `/reload` 或重启。要回滚到 `0.1.3`，先恢复旧配置，再锁定旧包版本。
+
+## 从旧 Powerline 迁移
 
 ## 1. 迁移矩阵
 
@@ -6,8 +22,8 @@
 |---|---|---|---|
 | status/preset/custom segments | 待用户确认 | 配置 `segments` + `/prompt-ui preset` | 已实现，需按实际配置映射 |
 | model/thinking | 常用 | `model` 段 + 原生 footer | 已实现 |
-| path/branch/session | 常用 | `path`/`git`/`session` | 已实现（默认 native 只在原生 footer） |
-| token/cache/cost | 待确认 | `token_*`/`cache_*`/`cost` | 已实现，replace 显式启用 |
+| path/branch/session | 常用 | `path`/`git`/`session`；标题在提示行 | 输入上方或原生 footer |
+| token/cache/cost | 待确认 | `token_*`/`cache_*`/`cost` | 用 `segments` 或 `detailSegments` 显式配置 |
 | context | 常用 | 中央 gauge | 已实现 |
 | 时钟 | 可选 | `time` / `clock.enabled` | 已实现 |
 | `/cd` | unknown | Pi 原生能力 | 未迁移 |
@@ -42,7 +58,7 @@ pi-prompt 检测到 editor 已被外国 factory 接管时拒绝覆盖并提示�
 ## 4. 回滚
 
 - `/prompt-ui preset native`：仅回退 editor；不重启也可以。
-- 已设置 `footerMode=replace`：必须重启 Pi 才能恢复原生 footer。
+- `footerMode: "none"` 切回 `native`：先改配置，再 `/reload` 或重启；只切 editor preset 不会修改 footer。
 - 禁用 pi-prompt（从 settings/packages 移除或 `enabled=false`）后重启。
 - 如需恢复旧 Powerline，先确认 pi-prompt 不再加载，再恢复旧扩展；不要在同一进程内抢 editor/footer。
 - 不修改 Hashline、TODO、审批业务数据。

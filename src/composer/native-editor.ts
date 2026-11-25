@@ -1,14 +1,12 @@
 import { CustomEditor, type KeybindingsManager } from "@earendil-works/pi-coding-agent";
-import type { EditorTheme, TuiMouseEvent, TuiMouseEventResult, TUI } from "@earendil-works/pi-tui";
+import { CURSOR_MARKER, type EditorTheme, type TuiMouseEvent, type TuiMouseEventResult, type TUI } from "@earendil-works/pi-tui";
+import { displayWidth } from "@jackice/pi-ui";
 
-import { choosePrefix, composeFrame, type FrameResult } from "./frame.ts";
-import type { PromptShape } from "./shapes.ts";
+import { alignHeading, choosePrefix, composeFrame, type FrameResult } from "./frame.ts";
 
 export interface BandEditorSource {
-  renderStatus(width: number): string;
-  /** inline 模式的 editor 保留行；undefined 表示不占额外行。 */
-  renderMeta?(width: number): string | undefined;
-  shape(): PromptShape;
+  renderTitle(): string;
+  renderBands(width: number): { status: string; detail?: string | undefined };
   prefix(): string;
   ascii(): boolean;
 }
@@ -20,6 +18,8 @@ interface CaptureState {
   bottomHidden: number;
 }
 
+type WorkingStatus = Parameters<CustomEditor["setWorkingStatusIndicator"]>[0];
+
 let tokenCounter = 0;
 
 function nextToken(kind: string): string {
@@ -30,15 +30,27 @@ function nextToken(kind: string): string {
 export class BandEditor extends CustomEditor {
   private capture: CaptureState | undefined;
   private lastFrame: FrameResult | undefined;
+  private workingStatus: WorkingStatus;
   private readonly source: BandEditorSource;
 
   constructor(tui: TUI, theme: EditorTheme, keybindings: KeybindingsManager, source: BandEditorSource) {
-    super(tui, theme, keybindings, { embedWorkingStatus: false });
+    super(tui, theme, keybindings, { embedWorkingStatus: true });
     this.source = source;
   }
 
   getFrame(): FrameResult | undefined {
     return this.lastFrame;
+  }
+
+  override setWorkingStatusIndicator(indicator: WorkingStatus): void {
+    super.setWorkingStatusIndicator(indicator);
+    this.workingStatus = indicator;
+  }
+
+  private renderHeading(title: string, width: number): string {
+    if (!this.workingStatus) return title;
+    const working = this.workingStatus.renderInBorder(width);
+    return displayWidth(working) > 0 ? alignHeading(working, title, width) : title;
   }
 
   protected override renderTopBorder(width: number, hiddenLineCount: number): string {
@@ -59,10 +71,6 @@ export class BandEditor extends CustomEditor {
 
   override render(width: number): string[] {
     this.lastFrame = undefined;
-    const shape = this.source.shape();
-    if (shape.statusPlacement === "none") {
-      return super.render(width);
-    }
     const choice = choosePrefix(width, this.getPaddingX(), [this.source.prefix(), ">", ""]);
     if (!choice) {
       return super.render(width);
@@ -94,33 +102,26 @@ export class BandEditor extends CustomEditor {
     const completions = lines.slice(bottomIndex + 1);
     if (inputs.length === 0) return super.render(width);
 
+    let heading: string;
     let status: string;
+    let detail: string | undefined;
     try {
-      status = this.source.renderStatus(width);
+      heading = this.renderHeading(this.source.renderTitle(), width);
+      ({ status, detail } = this.source.renderBands(width));
     } catch {
       return super.render(width);
     }
-    if (status.includes("\n") || status.includes("\r")) return super.render(width);
-
-    let meta: string | undefined;
-    if (this.source.renderMeta) {
-      try {
-        meta = this.source.renderMeta(width);
-      } catch {
-        return super.render(width);
-      }
-      if (meta !== undefined && (meta.includes("\n") || meta.includes("\r"))) {
-        return super.render(width);
-      }
+    if (/[\r\n]/.test(heading) || /[\r\n]/.test(status) || (detail !== undefined && /[\r\n]/.test(detail))) {
+      return super.render(width);
     }
 
     const frame = composeFrame({
       width,
-      shape,
       prefix: choice.prefix,
       prefixWidth: choice.width,
+      heading,
       status,
-      ...(meta !== undefined ? { meta } : {}),
+      detail,
       capture: {
         inputs,
         completions,
@@ -140,10 +141,20 @@ export class BandEditor extends CustomEditor {
 
   override handleMouse(event: TuiMouseEvent): TuiMouseEventResult | undefined {
     const frame = this.lastFrame;
-    const mapping = frame?.mapping[event.y];
-    if (!frame || !mapping) return undefined;
+    if (!frame) return super.handleMouse(event);
 
-    if (mapping.kind === "status" || mapping.kind === "scroll" || mapping.kind === "meta") {
+    // Pi 全屏容器可能转发裁剪前的高度；触底时按实际可见行重建光标偏移。
+    const height = this.tui.mode === "fullscreen"
+      ? Math.min(event.height, this.tui.terminal.rows - event.screenY + event.y)
+      : event.height;
+    const cursorRow = height > 0 && height < frame.rows.length
+      ? frame.rows.findIndex((row) => row.includes(CURSOR_MARKER))
+      : -1;
+    const offset = height > 0 ? Math.max(0, cursorRow - height + 1) : 0;
+    const mapping = frame.mapping[event.y + offset];
+    if (!mapping) return undefined;
+
+    if (mapping.kind !== "input" && mapping.kind !== "completion") {
       return event.type === "click" ? { handled: true, focus: true } : undefined;
     }
     if (mapping.kind === "input" && event.x < frame.prefixWidth) {

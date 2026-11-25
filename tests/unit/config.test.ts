@@ -14,42 +14,25 @@ describe("config", () => {
     expect(usesGit(config)).toBe(false);
   });
 
-  it("replace 模式使用独立默认并启用 git/cost", () => {
-    const { config, hardError } = resolveConfig({ footerMode: "replace" });
+  it("none 接受可配置状态，默认不启动 Git", () => {
+    const { config, hardError } = resolveConfig({ footerMode: "none" });
     expect(hardError).toBe(false);
-    expect(config.segments.left).toEqual(["brand", "model", "path", "git", "session"]);
-    expect(config.segments.right).toContain("extension_statuses");
-    expect(config.git.enabled).toBe(true);
-    expect(config.cost.enabled).toBe(true);
-    expect(config.extensionStatusKeys.workflow).toBe("jackice:workflow");
-    expect(usesGit(config)).toBe(true);
+    expect(config.footerMode).toBe("none");
+    expect(config.metaSegments).toEqual([]);
+    expect(usesGit(config)).toBe(false);
+    expect(usesGit(resolveConfig({ footerMode: "none", detailSegments: ["git"] }).config)).toBe(true);
   });
 
-  it("compact/hidden 接受模式并沿用 native 分段默认", () => {
-    for (const footerMode of ["compact", "hidden"] as const) {
-      const { config, hardError } = resolveConfig({ footerMode });
-      expect(hardError).toBe(false);
-      expect(config.footerMode).toBe(footerMode);
-      expect(config.segments.left).toEqual(["brand", "model"]);
-      expect(config.segments.right).toEqual(["token_rate"]);
-      expect(config.git.enabled).toBe(false);
-      expect(config.cost.enabled).toBe(false);
-    }
-  });
-
-  it("inline 使用 native 分段与默认 metaSegments", () => {
-    const { config, hardError } = resolveConfig({ footerMode: "inline" });
-    expect(hardError).toBe(false);
-    expect(config.footerMode).toBe("inline");
-    expect(config.segments.left).toEqual(["brand", "model"]);
-    expect(config.segments.right).toEqual(["token_rate"]);
-    expect(config.metaSegments).toEqual(["path", "git", "session", "cost"]);
-    expect(usesGit(config)).toBe(true);
+  it.each(["hidden", "inline", "compact", "replace"])("旧模式 %s 明确报告迁移到 none", (footerMode) => {
+    const { errors, hardError } = resolveConfig({ footerMode });
+    expect(hardError).toBe(true);
+    expect(errors.join(" ")).toContain(`footerMode=${footerMode}`);
+    expect(errors.join(" ")).toContain('footerMode: "none"');
   });
 
   it("metaSegments 过滤未知、重复与 context", () => {
     const { config, errors, hardError } = resolveConfig({
-      footerMode: "inline",
+      footerMode: "none",
       metaSegments: ["path", "nope", "path", "context", "cost"],
     });
     expect(hardError).toBe(false);
@@ -60,7 +43,7 @@ describe("config", () => {
 
   it("显式覆盖 mode 默认", () => {
     const { config } = resolveConfig({
-      footerMode: "replace",
+      footerMode: "none",
       segments: { left: ["brand"], right: ["time"] },
       git: { enabled: false },
     });

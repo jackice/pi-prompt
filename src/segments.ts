@@ -16,10 +16,14 @@ export interface SegmentBuildInput {
   extensionStatuses?: ReadonlyMap<string, string> | undefined;
 }
 
-export interface BandSegments {
+interface SegmentGroups {
   left: SegmentSpec[];
   right: SegmentSpec[];
+}
+
+export interface BandSegments extends SegmentGroups {
   gauge?: GaugeSlot | undefined;
+  detail?: SegmentGroups;
 }
 
 function variant(text: string, tone: SegmentVariant["tone"] = "text"): SegmentVariant {
@@ -42,7 +46,7 @@ function spec(
   };
 }
 
-function homePath(cwd: string, home: string | undefined): string {
+export function homePath(cwd: string, home: string | undefined): string {
   if (home && cwd === home) return "~";
   if (home && cwd.startsWith(`${home}/`)) return `~${cwd.slice(home.length)}`;
   return cwd;
@@ -86,24 +90,6 @@ function gitVariants(facts: PromptFacts): { full: string; compact: string; min: 
     full: `${middleTruncate(branch, 20)}${suffix}`,
     compact: `${middleTruncate(branch, 12)}${suffix}`,
     min: `${middleTruncate(branch, 6)}${suffix}`,
-  };
-}
-
-function sessionVariants(facts: PromptFacts): { full: string; compact: string; min: string } {
-  const name = facts.session.name;
-  const id = shortId(facts.session.id);
-  if (name) {
-    return {
-      full: middleTruncate(name, 20),
-      compact: middleTruncate(name, 12),
-      min: middleTruncate(name, 6),
-    };
-  }
-  const label = id ?? "(none)";
-  return {
-    full: `session ${label}`,
-    compact: label,
-    min: label.slice(0, 6),
   };
 }
 
@@ -159,7 +145,10 @@ function makeSegmentBuilders(input: SegmentBuildInput): Record<SegmentId, () => 
       const dirty = (facts.git?.staged ?? 0) + (facts.git?.unstaged ?? 0) + (facts.git?.untracked ?? 0) + (facts.git?.conflicts ?? 0);
       return spec("git", "left", variants, dirty > 0 ? "warning" : "muted");
     },
-    session: () => spec("session", "left", sessionVariants(facts), "muted"),
+    session: () => {
+      const id = shortId(facts.session.id);
+      return id ? spec("session", "left", { full: id }, "muted") : undefined;
+    },
     workflow: () => {
       const key = config.extensionStatusKeys.workflow;
       const value = key ? statuses?.get(key) : undefined;
@@ -204,13 +193,10 @@ function makeSegmentBuilders(input: SegmentBuildInput): Record<SegmentId, () => 
       return spec("cost", "right", { full: `${prefix}${cost.toFixed(3)}` }, "muted");
     },
     time: () => {
-      if (!config.clock.enabled && !config.segments.left.includes("time") && !config.segments.right.includes("time")) {
-        return undefined;
-      }
       const date = new Date(input.now);
       const hh = date.getHours().toString().padStart(2, "0");
       const mm = date.getMinutes().toString().padStart(2, "0");
-      return spec("time", config.segments.left.includes("time") ? "left" : "right", { full: `${hh}:${mm}` }, "muted");
+      return spec("time", "right", { full: `${hh}:${mm}` }, "muted");
     },
   };
 }
@@ -223,49 +209,35 @@ export function buildBandSegments(input: SegmentBuildInput): BandSegments {
   const { facts, config, theme } = input;
   const ascii = config.icons === "ascii";
   const builders = makeSegmentBuilders(input);
-  const left: SegmentSpec[] = [];
-  const right: SegmentSpec[] = [];
-
-  const leftIds = config.segments.left;
-  const rightIds = [...config.segments.right];
-  if (
-    config.clock.enabled &&
-    !leftIds.includes("time") &&
-    !rightIds.includes("time")
-  ) {
-    rightIds.push("time");
-  }
-
-  for (const id of leftIds) {
+  const primary: SegmentGroups = { left: [], right: [] };
+  for (const id of config.segments.left) {
     const built = placed(builders[id](), "left");
-    if (built) left.push(built);
+    if (built) primary.left.push(built);
   }
-  for (const id of rightIds) {
+  for (const id of config.segments.right) {
     const built = placed(builders[id](), "right");
-    if (built) right.push(built);
+    if (built) primary.right.push(built);
   }
 
-  // workflow/subagents 状态可能来自扩展映射，但配置里没有 workflow/subagents 时不应偷偷显示。
-  return { left, right, gauge: buildGauge(facts, config, theme, ascii) };
-}
-
-export interface MetaSegments {
-  left: SegmentSpec[];
-  right: SegmentSpec[];
-}
-
-/** inline 模式的 meta 行：按 id 顺序构造，保留 builder 自带的左右分组。 */
-export function buildMetaSegments(input: SegmentBuildInput, ids: readonly SegmentId[]): MetaSegments {
-  const builders = makeSegmentBuilders(input);
-  const left: SegmentSpec[] = [];
-  const right: SegmentSpec[] = [];
-  for (const id of ids) {
+  const detail: SegmentGroups = { left: [], right: [] };
+  const primaryIds = new Set([...config.segments.left, ...config.segments.right]);
+  const add = (id: SegmentId, target: SegmentGroups): void => {
+    if (primaryIds.has(id)) return;
+    primaryIds.add(id);
     const built = builders[id]();
-    if (!built) continue;
-    if (built.side === "right") right.push(built);
-    else left.push(built);
+    if (built) target[built.side].push(built);
+  };
+  if (config.footerMode === "none") {
+    for (const id of config.detailSegments) add(id, detail);
+    for (const id of config.metaSegments) add(id, primary);
   }
-  return { left, right };
+  if (config.clock.enabled) add("time", primary);
+
+  return {
+    ...primary,
+    gauge: buildGauge(facts, config, theme, ascii),
+    ...(detail.left.length || detail.right.length ? { detail } : {}),
+  };
 }
 
 function buildGauge(
@@ -299,6 +271,3 @@ function buildGauge(
   return { minWidth, render: (width) => gauge.render(width) };
 }
 
-export function usedSegmentIds(config: PromptConfig): SegmentId[] {
-  return [...config.segments.left, ...config.segments.right];
-}

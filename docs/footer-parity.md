@@ -1,5 +1,13 @@
 # 原生 Footer 等价记录
 
+## 0.2.0 的底栏
+
+- `native` 不接管底栏；全屏单行输入时，原生底栏直接跟随输入。真实 Pi 1.6.0 PTY 中观察到原生路径/分支/标题、用量和 `(auto)`。
+- `none` 安装零行底栏，输入位于最末。可通过 `segments`、`metaSegments`、`detailSegments` 配置输入上方的字段，不承诺与 Pi 原生底栏逐字段等价。
+- 从 `none` 切回 `native` 时，先改配置，再 `/reload` 或重启。旧版自定义底栏模式已移除，参见[迁移说明](migration.md)。
+
+以下 §1–5 是 0.1.x 的对照记录。
+
 ## 1. 默认：`footerMode=native`
 
 pi-prompt 不调用 `setFooter`，`provider` 引用始终为 null。原生 footer 由 Pi 自己渲染。

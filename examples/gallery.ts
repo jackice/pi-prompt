@@ -52,12 +52,17 @@ for (const width of [40, 80, 120]) {
   console.log(render(defaultConfig("native"), width, fixture()));
 }
 
-console.log("\nwidth=120 replace candidate");
-console.log(render(defaultConfig("replace"), 120, fixture()));
+const withNavigation: PromptConfig = {
+  ...defaultConfig("none"),
+  metaSegments: ["path", "git", "session", "cost"],
+  cost: { enabled: true },
+};
+console.log("\nwidth=120 no footer, with navigation");
+console.log(render(withNavigation, 120, fixture()));
 
 console.log("\nwidth=120 idle (no usage, unknown context)");
 console.log(
-  render(defaultConfig("replace"), 120, {
+  render(withNavigation, 120, {
     ...createFacts("/Users/jackice/dev/pi-prompt", 1),
     context: { quality: "unknown", capacity: 500000 },
   }),

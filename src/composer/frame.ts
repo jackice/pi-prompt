@@ -1,7 +1,5 @@
 import { displayWidth, truncate } from "@jackice/pi-ui";
 
-import type { PromptShape } from "./shapes.ts";
-
 export interface PrefixChoice {
   prefix: string;
   width: number;
@@ -35,17 +33,12 @@ export function choosePrefix(
   return undefined;
 }
 
-export function alignMetaRow(left: string, right: string, width: number): string {
-  if (width <= 0) return "";
-  if (left.length > 0 && right.length > 0) {
-    const gap = Math.max(1, width - displayWidth(left) - displayWidth(right));
-    return truncate(`${left}${" ".repeat(gap)}${right}`, width);
-  }
-  if (left.length === 0 && right.length > 0) {
-    const padding = " ".repeat(Math.max(0, width - displayWidth(right)));
-    return truncate(`${padding}${right}`, width);
-  }
-  return truncate(left, width);
+export function alignHeading(left: string, right: string, width: number): string {
+  const primary = truncate(left, width);
+  const remaining = width - displayWidth(primary);
+  if (!right || remaining < 2) return primary;
+  const title = truncate(right, remaining - 1);
+  return primary + " ".repeat(remaining - displayWidth(title)) + title;
 }
 
 export interface NativeCapture {
@@ -57,7 +50,7 @@ export interface NativeCapture {
 }
 
 export interface RowMapping {
-  kind: "status" | "input" | "completion" | "scroll" | "meta";
+  kind: "heading" | "status" | "detail" | "input" | "completion" | "scroll";
   nativeY?: number;
   xOffset?: number;
 }
@@ -73,23 +66,21 @@ export interface FrameResult {
 
 export interface ComposeFrameOptions {
   width: number;
-  shape: PromptShape;
   prefix: string;
   prefixWidth: number;
+  heading: string;
   status: string;
-  /** editor 保留行里的单行元信息；只有 footerMode=inline 时提供。 */
-  meta?: string | undefined;
+  detail?: string | undefined;
   capture: NativeCapture;
   ascii: boolean;
 }
 
 export function composeFrame(options: ComposeFrameOptions): FrameResult | undefined {
-  const { width, shape, prefix, prefixWidth, capture } = options;
+  const { width, prefix, prefixWidth, capture } = options;
   if (capture.inputs.length === 0) return undefined;
-  const status = truncate(options.status.replace(/[\r\n]+/g, " "), width);
-  const meta = options.meta === undefined
-    ? undefined
-    : truncate(options.meta.replace(/[\r\n]+/g, " "), width);
+  const heading = truncate(options.heading, width);
+  const status = truncate(options.status, width);
+  const detail = options.detail?.trim() ? truncate(options.detail, width) : undefined;
   const hiddenTop = Math.max(0, Math.floor(capture.topHidden));
   const hiddenBottom = Math.max(0, Math.floor(capture.bottomHidden));
   const scroll = hiddenTop + hiddenBottom > 0
@@ -103,9 +94,9 @@ export function composeFrame(options: ComposeFrameOptions): FrameResult | undefi
   const mapping: RowMapping[] = [];
   const gutter = " ".repeat(prefixWidth);
 
-  const pushStatus = (): void => {
-    rows.push(status);
-    mapping.push({ kind: "status" });
+  const push = (line: string, kind: RowMapping["kind"]): void => {
+    rows.push(line);
+    mapping.push({ kind });
   };
   const pushInputs = (): void => {
     capture.inputs.forEach((line, index) => {
@@ -118,11 +109,6 @@ export function composeFrame(options: ComposeFrameOptions): FrameResult | undefi
     rows.push(gutter + scroll);
     mapping.push({ kind: "scroll" });
   };
-  const pushMeta = (): void => {
-    if (meta === undefined) return;
-    rows.push(meta);
-    mapping.push({ kind: "meta" });
-  };
   const pushCompletions = (): void => {
     capture.completions.forEach((line, index) => {
       rows.push(gutter + line);
@@ -134,11 +120,11 @@ export function composeFrame(options: ComposeFrameOptions): FrameResult | undefi
     });
   };
 
-  if (shape.statusPlacement === "above") pushStatus();
-  pushInputs();
+  push(heading, "heading");
+  push(status, "status");
+  if (detail !== undefined) push(detail, "detail");
   pushScroll();
-  if (shape.statusPlacement === "below") pushStatus();
-  pushMeta();
+  pushInputs();
   pushCompletions();
 
   for (const row of rows) {

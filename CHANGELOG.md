@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.0
+
+- Stack Pi's native activity indicator, session title, and configurable status above the editor in both `band` and `borderless`.
+- Remove the fixed blank row below single-line input. The native footer, when selected, starts immediately below it.
+- Keep only `footerMode: "native"` and `"none"`. Existing `hidden`, `inline`, `compact`, and `replace` settings need an explicit [migration](docs/migration.md).
+- Merge `metaSegments` into the band and use `detailSegments` for an optional, deduplicated line above the input.
+
 ## 0.1.3
 
 - In `footerMode=inline`, the meta row falls back to Pi's footer branch and starts the async Git provider when `metaSegments` contains `git`.

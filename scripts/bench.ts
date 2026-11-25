@@ -5,7 +5,6 @@ import type { EditorTheme, TUI } from "@earendil-works/pi-tui";
 import { fromPiTheme, layoutSegmentBar, plainTheme } from "@jackice/pi-ui";
 
 import { BandEditor } from "../src/composer/native-editor.ts";
-import { resolveShape } from "../src/composer/shapes.ts";
 import { defaultConfig } from "../src/config.ts";
 import { buildBandSegments } from "../src/segments.ts";
 import { createFacts, type PromptFacts } from "../src/status/facts.ts";
@@ -86,10 +85,9 @@ const tui = {
 } as unknown as TUI;
 const editorTheme = { borderColor: (text: string) => text, selectList: {} } as unknown as EditorTheme;
 const keybindings = { matches: () => false } as unknown as KeybindingsManager;
-const shape = resolveShape(config);
 const editor = new BandEditor(tui, editorTheme, keybindings, {
-  renderStatus: () => `φ > GPT-6.2 high  2% ${"─".repeat(60)} 500K  ${formatTokens(41000)}t/s`,
-  shape: () => shape,
+  renderTitle: () => "~/dev/src/github.com/jackice/pi-prompt",
+  renderBands: () => ({ status: `φ > GPT-6.2 high  2% ${"─".repeat(60)} 500K  ${formatTokens(41000)}t/s` }),
   prefix: () => config.prefix,
   ascii: () => false,
 });

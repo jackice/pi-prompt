@@ -11,7 +11,7 @@ import {
   type Theme,
 } from "@earendil-works/pi-coding-agent";
 import type { EditorComponent, EditorTheme, TUI } from "@earendil-works/pi-tui";
-import { fromPiTheme, layoutSegmentBar, type UiTheme } from "@jackice/pi-ui";
+import { fromPiTheme, layoutSegmentBar, sanitizeLine, type UiTheme } from "@jackice/pi-ui";
 
 import {
   defaultConfig,
@@ -22,10 +22,7 @@ import {
   type LoadedConfig,
 } from "../config.ts";
 import { BandEditor } from "../composer/native-editor.ts";
-import { alignMetaRow } from "../composer/frame.ts";
-import { resolveShape } from "../composer/shapes.ts";
-import { EmptyFooter, PromptFooter } from "../footer.ts";
-import { buildBandSegments, buildMetaSegments } from "../segments.ts";
+import { buildBandSegments, homePath } from "../segments.ts";
 import { GitProvider, toGitFacts, type GitExec, type GitStatus } from "../status/git.ts";
 import type { ContextFacts, PromptFacts, UsageFacts } from "../status/facts.ts";
 import { RenderScheduler } from "../status/scheduler.ts";
@@ -45,15 +42,13 @@ interface Runtime {
   config: PromptConfig;
   configRevision: number;
   factory?: EditorFactoryFn | undefined;
-  footer?: PromptFooter | undefined;
   footerData?: ReadonlyFooterDataProvider | undefined;
   tui?: TUI | undefined;
   theme?: Theme | undefined;
   uiTheme: UiTheme;
   themeVersion: number;
   hostname?: string | undefined;
-  statusCache?: { key: string; line: string } | undefined;
-  metaCache?: { key: string; line: string } | undefined;
+  bandCache?: { key: string; status: string; detail?: string | undefined } | undefined;
   git?: GitProvider | undefined;
   pollTimer?: NodeJS.Timeout | undefined;
   startedAt?: number | undefined;
@@ -205,17 +200,6 @@ export class PromptExtension {
       return;
     }
 
-    const footerMode = this.config.footerMode;
-    if (footerMode !== "native") {
-      const message = footerMode === "replace"
-        ? "pi-prompt: footerMode=replace 仍是实验模式，原生 footer 字段尚未逐项 parity 验收；切回 native 可 /reload（Pi 1.6.0 已验证）或重启。"
-        : `pi-prompt: footerMode=${footerMode} 使用自定义 footer；切回 native 可 /reload（Pi 1.6.0 已验证）或重启。`;
-      if (!this.notified.has(message)) {
-        this.notified.add(message);
-        ctx.ui.notify(message, "warning");
-      }
-    }
-
     const runtime: Runtime = {
       ctx,
       store: new PromptStore(ctx.cwd, 1),
@@ -232,10 +216,15 @@ export class PromptExtension {
     runtime.store.subscribe(() => runtime.scheduler.requestThrottled());
     this.refreshData(ctx, runtime);
 
-    if (this.config.shape !== "native") this.installEditor(runtime);
-    if (this.config.footerMode !== "native") this.installFooter(runtime);
+    const editorAvailable = this.config.shape === "native"
+      ? ctx.ui.getEditorComponent() === undefined
+      : this.installEditor(runtime);
+    if (this.config.footerMode === "none") {
+      if (editorAvailable) this.installEmptyFooter(runtime);
+      else if (this.config.shape === "native") this.warnEditorConflict(ctx);
+    }
     if (usesGit(this.config)) this.startGit(runtime);
-    if (usesClockSegment(this.config) || this.config.clock.enabled) {
+    if (usesClockSegment(this.config)) {
       runtime.scheduler.requestNow();
     }
   }
@@ -258,15 +247,18 @@ export class PromptExtension {
     }
   }
 
+  private warnEditorConflict(ctx: ExtensionContext): void {
+    const message = "pi-prompt: 其他扩展已接管编辑器，拒绝覆盖编辑器或底栏；请先停用冲突扩展并重启。";
+    if (this.notified.has(message)) return;
+    this.notified.add(message);
+    ctx.ui.notify(message, "warning");
+  }
+
   private installEditor(runtime: Runtime): boolean {
     const ctx = runtime.ctx;
     const current = ctx.ui.getEditorComponent();
     if (current && !isOwnedFactory(current)) {
-      const message = "pi-prompt: 检测到其他扩展已接管编辑器，拒绝覆盖；请先停用冲突扩展（如旧 Powerline）并重启。";
-      if (!this.notified.has(message)) {
-        this.notified.add(message);
-        ctx.ui.notify(message, "warning");
-      }
+      this.warnEditorConflict(ctx);
       return false;
     }
     if (runtime.factory !== undefined && current === runtime.factory) return true;
@@ -274,12 +266,11 @@ export class PromptExtension {
     const factory: EditorFactoryFn = (tui, editorTheme, keybindings) => {
       runtime.tui = tui;
       return new BandEditor(tui, editorTheme, keybindings, {
-        renderStatus: (width) => this.renderStatus(runtime, width),
-        ...(runtime.config.footerMode === "inline"
-          ? { renderMeta: (width: number) => this.renderMeta(runtime, width) }
-          : {}),
-        shape: () => resolveShape(runtime.config),
-        prefix: () => resolveShape(runtime.config).firstPrefix,
+        renderTitle: () => this.renderTitle(runtime),
+        renderBands: (width) => this.renderBands(runtime, width),
+        prefix: () => runtime.config.shape === "borderless"
+          ? (runtime.config.icons === "ascii" ? "> " : "❯ ")
+          : runtime.config.prefix,
         ascii: () => runtime.config.icons === "ascii",
       });
     };
@@ -294,27 +285,17 @@ export class PromptExtension {
     return true;
   }
 
-  private installFooter(runtime: Runtime): void {
-    const mode = runtime.config.footerMode;
-    runtime.ctx.ui.setFooter((tui, theme, footerData) => {
-      runtime.tui = tui;
+  private installEmptyFooter(runtime: Runtime): void {
+    runtime.ctx.ui.setFooter((tui, _theme, footerData) => {
       runtime.footerData = footerData;
-      if (mode === "hidden" || mode === "inline") {
-        return new EmptyFooter();
-      }
-      const footer = new PromptFooter(theme, {
-        facts: () => runtime.store.get(),
-        config: () => runtime.config,
-      }, footerData, { lines: mode === "compact" ? 1 : 2 });
-      runtime.footer = footer;
-      const unsubscribe = footerData.onBranchChange(() => {
-        footer.invalidate();
-        tui.requestRender();
-      });
+      const unsubscribe = footerData.onBranchChange(() => tui.requestRender());
       return {
-        render: (width: number) => footer.render(width),
-        invalidate: () => footer.invalidate(),
-        dispose: () => unsubscribe(),
+        render: () => [],
+        invalidate() {},
+        dispose: () => {
+          unsubscribe();
+          runtime.footerData = undefined;
+        },
       };
     });
   }
@@ -424,75 +405,47 @@ export class PromptExtension {
     runtime.themeVersion++;
   }
 
-  private renderStatus(runtime: Runtime, width: number): string {
+  private renderTitle(runtime: Runtime): string {
     this.ensureTheme(runtime);
-    const facts = runtime.store.get();
-    const statuses = runtime.footerData?.getExtensionStatuses();
-    const statusesKey = statuses
-      ? [...statuses.entries()].map(([key, value]) => `${key}=${value}`).sort().join("\u0000")
-      : "";
-    const key = `${width}|${facts.revision}|${runtime.configRevision}|${runtime.themeVersion}|${runtime.config.icons}|${statusesKey}`;
-    if (runtime.statusCache?.key === key) return runtime.statusCache.line;
-
-    const segments = buildBandSegments({
-      facts,
-      config: runtime.config,
-      theme: runtime.uiTheme,
-      hostname: runtime.hostname,
-      home: process.env.HOME ?? process.env.USERPROFILE,
-      now: Date.now(),
-      extensionStatuses:
-        runtime.config.footerMode === "replace" || runtime.config.footerMode === "inline"
-          ? statuses
-          : undefined,
-    });
-    const layout = layoutSegmentBar({
-      width,
-      left: segments.left,
-      right: segments.right,
-      ...(segments.gauge !== undefined ? { gauge: segments.gauge } : {}),
-      separator: runtime.config.separator,
-      theme: runtime.uiTheme,
-    });
-    runtime.statusCache = { key, line: layout.line };
-    return layout.line;
+    const { name, cwd } = runtime.store.get().session;
+    const clean = (value: string): string => sanitizeLine(value).replace(/[\r\n]+/g, " ").trim();
+    const title = (name && clean(name)) || clean(homePath(cwd, process.env.HOME ?? process.env.USERPROFILE));
+    return runtime.uiTheme.fg("muted", title || runtime.config.brand.text);
   }
 
-  private renderMeta(runtime: Runtime, width: number): string | undefined {
-    if (runtime.config.footerMode !== "inline") return undefined;
+  private renderBands(runtime: Runtime, width: number): { status: string; detail?: string | undefined } {
     this.ensureTheme(runtime);
     const facts = runtime.store.get();
     const statuses = runtime.footerData?.getExtensionStatuses();
-    const statusesKey = statuses
-      ? [...statuses.entries()].map(([key, value]) => `${key}=${value}`).sort().join("\u0000")
-      : "";
+    const statusesKey = statuses ? JSON.stringify([...statuses]) : "";
     const branch = facts.git?.branch ?? runtime.footerData?.getGitBranch() ?? undefined;
-    const metaFacts = facts.git || !branch
-      ? facts
-      : { ...facts, git: { branch, stale: false } };
-    const key = `${width}|${facts.revision}|${runtime.configRevision}|${runtime.themeVersion}|${runtime.config.metaSegments.join(",")}|${branch ?? ""}|${statusesKey}`;
-    if (runtime.metaCache?.key === key) return runtime.metaCache.line;
+    const key = `${width}|${facts.revision}|${runtime.configRevision}|${runtime.themeVersion}|${branch ?? ""}|${statusesKey}`;
+    if (runtime.bandCache?.key === key) return runtime.bandCache;
 
-    const meta = buildMetaSegments({
-      facts: metaFacts,
+    const segments = buildBandSegments({
+      facts: facts.git || !branch ? facts : { ...facts, git: { branch, stale: false } },
       config: runtime.config,
       theme: runtime.uiTheme,
       hostname: runtime.hostname,
       home: process.env.HOME ?? process.env.USERPROFILE,
       now: Date.now(),
       extensionStatuses: statuses,
-    }, runtime.config.metaSegments);
-    const layout = layoutSegmentBar({
-      width,
-      left: meta.left,
-      right: meta.right,
-      separator: runtime.config.separator,
-      theme: runtime.uiTheme,
     });
-
-    let line = alignMetaRow(layout.left, layout.right, width);
-    runtime.metaCache = { key, line };
-    return line;
+    const common = { width, separator: runtime.config.separator, theme: runtime.uiTheme };
+    const status = layoutSegmentBar({
+      ...common,
+      left: segments.left,
+      right: segments.right,
+      ...(segments.gauge ? { gauge: segments.gauge } : {}),
+    }).line;
+    const detail = segments.detail ? layoutSegmentBar({ ...common, ...segments.detail }).line : undefined;
+    const cached = {
+      key,
+      status: status.trim() ? status : runtime.uiTheme.fg("accent", runtime.config.brand.text),
+      detail,
+    };
+    runtime.bandCache = cached;
+    return cached;
   }
 
   private async command(args: string, ctx: ExtensionCommandContext): Promise<void> {
@@ -527,10 +480,6 @@ export class PromptExtension {
       return;
     }
     const runtime = this.runtime;
-    if (runtime?.config.footerMode === "replace" && shape === "native") {
-      ctx.ui.notify("pi-prompt: 已替换 footer 时完整 native 预设需重启 Pi。", "warning");
-      return;
-    }
 
     if (shape === "native") {
       const current = ctx.ui.getEditorComponent();
@@ -543,14 +492,13 @@ export class PromptExtension {
         runtime.factory = undefined;
       }
       this.config.shape = "native";
-      ctx.ui.notify("pi-prompt: 已切到 native 预设（editor-only；footer 未替换）。", "info");
+      ctx.ui.notify("pi-prompt: 已切到原生编辑器；底栏配置不变。", "info");
       return;
     }
 
     this.config.shape = shape;
     if (runtime) {
       runtime.configRevision++;
-      runtime.statusCache = undefined;
       if (!this.installEditor(runtime)) return;
       runtime.scheduler.requestNow();
     }
@@ -562,7 +510,8 @@ export class PromptExtension {
     const facts = runtime?.store.get();
     const lines: string[] = [];
     lines.push(`pi-prompt · owner=${runtime ? (runtime.factory ? "editor" : "none") : "inactive"} · mode=${ctx.mode}`);
-    lines.push(`shape=${this.config.shape} · footer=${this.config.footerMode} · separator=${this.config.separator} · icons=${this.config.icons}`);
+    const footer = this.config.footerMode === "none" && !runtime?.footerData ? "none (未安装)" : this.config.footerMode;
+    lines.push(`shape=${this.config.shape} · footer=${footer} · separator=${this.config.separator} · icons=${this.config.icons}`);
     lines.push(`config=${this.configPath} (${this.configSource})`);
     if (facts) {
       const model = facts.model ? `${facts.model.provider ?? "?"}/${facts.model.id}${facts.model.thinking ? ` ${facts.model.thinking}` : ""}` : "unknown";
@@ -587,7 +536,9 @@ export class PromptExtension {
         : "git=unavailable");
     }
     lines.push(`segments.left=[${this.config.segments.left.join(", ")}] right=[${this.config.segments.right.join(", ")}]`);
-    lines.push("known-gaps: (auto), CH%, routed model/effort, xp, (sub)");
+    if (this.config.footerMode === "none") {
+      lines.push(`metaSegments=[${this.config.metaSegments.join(", ")}] · detailSegments=[${this.config.detailSegments.join(", ")}]`);
+    }
     if (this.configErrors.length > 0) lines.push(`config-errors: ${this.configErrors.join("; ")}`);
     ctx.ui.notify(lines.join("\n"), "info");
   }
