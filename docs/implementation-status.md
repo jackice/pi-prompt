@@ -91,5 +91,6 @@
 
 ## 6. Commit
 
-- pi-ui：待首次提交后记录。
-- pi-prompt：待首次提交后记录。
+- pi-ui：`132e0f5`（组件/文档/版本）、`77d8d7d`（SegmentBar 实现补齐）。
+- pi-prompt：`6efca93`（0.1.0 初始实现与文档）。
+- 本文档更新后的 SHA 见后续 docs 提交。
