@@ -34,7 +34,7 @@
 | P5-01 宿主所有权 | 完成（主路径） | reload 重装、native 热切、foreign factory 拒绝 | footer owner 无公开检测 |
 | P5-02 共存矩阵 | 未执行 | — | 需真实 TODO/Goal/Subagent/审批 |
 | G5-Prompt | 未通过 | 共存未验证 | — |
-| P6-01 测试矩阵 | 部分 | 68 用例；PTY 冒烟；无手工 IME/鼠标 | — |
+| P6-01 测试矩阵 | 部分 | 83 用例；PTY 冒烟；无手工 IME/鼠标 | — |
 | P6-02 性能 | 部分 | `docs/performance.md`：热态 P95 0.012–0.023 ms；冷启动/RSS 未测 | — |
 | P6-03 迁移 | 文档完成 | `docs/migration.md` | 实际 Powerline 配置审计未做 |
 | G6-Prompt | 未通过 | 独立 Reviewer、性能完整矩阵、迁移实测缺 | 不发布 v1.0 |
@@ -43,7 +43,7 @@
 
 | 命令/场景 | 结果 |
 |---|---|
-| `npx vitest run` | 8 文件 / 68 测试通过 |
+| `npx vitest run` | 8 文件 / 83 测试通过 |
 | `npx tsc -p tsconfig.json --noEmit` | 通过 |
 | `npx tsx examples/gallery.ts` | 40/80/120 列、native/replace/ASCII 均渲染 |
 | `npx tsx scripts/bench.ts` | 默认状态带 P95 0.012 ms；BandEditor P95 0.015 ms |
@@ -58,6 +58,7 @@
 | footer A/B | native 模式 footer 与未安装扩展逐字一致（该状态） |
 | replace 配置 | 两行实验 footer + 启动 warning |
 | hidden/compact | hidden 零 footer；compact 单行；`/reload` 恢复 native 两行 |
+| inline | 空闲 3 行无空白；多行滚动后 meta；补全在 meta 后；40 列降级 |
 | 30/150 列 resize | 无溢出、无换行 |
 
 ## 4. 已知阻断与未验证

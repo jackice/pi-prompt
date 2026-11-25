@@ -35,6 +35,19 @@ export function choosePrefix(
   return undefined;
 }
 
+export function alignMetaRow(left: string, right: string, width: number): string {
+  if (width <= 0) return "";
+  if (left.length > 0 && right.length > 0) {
+    const gap = Math.max(1, width - displayWidth(left) - displayWidth(right));
+    return truncate(`${left}${" ".repeat(gap)}${right}`, width);
+  }
+  if (left.length === 0 && right.length > 0) {
+    const padding = " ".repeat(Math.max(0, width - displayWidth(right)));
+    return truncate(`${padding}${right}`, width);
+  }
+  return truncate(left, width);
+}
+
 export interface NativeCapture {
   inputs: readonly string[];
   completions: readonly string[];
@@ -44,7 +57,7 @@ export interface NativeCapture {
 }
 
 export interface RowMapping {
-  kind: "status" | "input" | "completion" | "scroll";
+  kind: "status" | "input" | "completion" | "scroll" | "meta";
   nativeY?: number;
   xOffset?: number;
 }
@@ -64,6 +77,8 @@ export interface ComposeFrameOptions {
   prefix: string;
   prefixWidth: number;
   status: string;
+  /** editor 保留行里的单行元信息；只有 footerMode=inline 时提供。 */
+  meta?: string | undefined;
   capture: NativeCapture;
   ascii: boolean;
 }
@@ -72,6 +87,9 @@ export function composeFrame(options: ComposeFrameOptions): FrameResult | undefi
   const { width, shape, prefix, prefixWidth, capture } = options;
   if (capture.inputs.length === 0) return undefined;
   const status = truncate(options.status.replace(/[\r\n]+/g, " "), width);
+  const meta = options.meta === undefined
+    ? undefined
+    : truncate(options.meta.replace(/[\r\n]+/g, " "), width);
   const hiddenTop = Math.max(0, Math.floor(capture.topHidden));
   const hiddenBottom = Math.max(0, Math.floor(capture.bottomHidden));
   const scroll = hiddenTop + hiddenBottom > 0
@@ -100,6 +118,11 @@ export function composeFrame(options: ComposeFrameOptions): FrameResult | undefi
     rows.push(gutter + scroll);
     mapping.push({ kind: "scroll" });
   };
+  const pushMeta = (): void => {
+    if (meta === undefined) return;
+    rows.push(meta);
+    mapping.push({ kind: "meta" });
+  };
   const pushCompletions = (): void => {
     capture.completions.forEach((line, index) => {
       rows.push(gutter + line);
@@ -115,6 +138,7 @@ export function composeFrame(options: ComposeFrameOptions): FrameResult | undefi
   pushInputs();
   pushScroll();
   if (shape.statusPlacement === "below") pushStatus();
+  pushMeta();
   pushCompletions();
 
   for (const row of rows) {

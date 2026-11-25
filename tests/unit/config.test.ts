@@ -37,6 +37,26 @@ describe("config", () => {
     }
   });
 
+  it("inline 使用 native 分段与默认 metaSegments", () => {
+    const { config, hardError } = resolveConfig({ footerMode: "inline" });
+    expect(hardError).toBe(false);
+    expect(config.footerMode).toBe("inline");
+    expect(config.segments.left).toEqual(["brand", "model"]);
+    expect(config.segments.right).toEqual(["token_rate"]);
+    expect(config.metaSegments).toEqual(["path", "git", "session", "cost"]);
+  });
+
+  it("metaSegments 过滤未知、重复与 context", () => {
+    const { config, errors, hardError } = resolveConfig({
+      footerMode: "inline",
+      metaSegments: ["path", "nope", "path", "context", "cost"],
+    });
+    expect(hardError).toBe(false);
+    expect(config.metaSegments).toEqual(["path", "cost"]);
+    expect(errors.some((message) => message.includes("metaSegments 未知"))).toBe(true);
+    expect(errors.some((message) => message.includes("metaSegments 重复"))).toBe(true);
+  });
+
   it("显式覆盖 mode 默认", () => {
     const { config } = resolveConfig({
       footerMode: "replace",

@@ -21,9 +21,10 @@ import {
   type LoadedConfig,
 } from "../config.ts";
 import { BandEditor } from "../composer/native-editor.ts";
+import { alignMetaRow } from "../composer/frame.ts";
 import { resolveShape } from "../composer/shapes.ts";
 import { EmptyFooter, PromptFooter } from "../footer.ts";
-import { buildBandSegments } from "../segments.ts";
+import { buildBandSegments, buildMetaSegments } from "../segments.ts";
 import { GitProvider, toGitFacts, type GitExec, type GitStatus } from "../status/git.ts";
 import type { ContextFacts, PromptFacts, UsageFacts } from "../status/facts.ts";
 import { RenderScheduler } from "../status/scheduler.ts";
@@ -51,6 +52,7 @@ interface Runtime {
   themeVersion: number;
   hostname?: string | undefined;
   statusCache?: { key: string; line: string } | undefined;
+  metaCache?: { key: string; line: string } | undefined;
   git?: GitProvider | undefined;
   pollTimer?: NodeJS.Timeout | undefined;
   startedAt?: number | undefined;
@@ -272,6 +274,9 @@ export class PromptExtension {
       runtime.tui = tui;
       return new BandEditor(tui, editorTheme, keybindings, {
         renderStatus: (width) => this.renderStatus(runtime, width),
+        ...(runtime.config.footerMode === "inline"
+          ? { renderMeta: (width: number) => this.renderMeta(runtime, width) }
+          : {}),
         shape: () => resolveShape(runtime.config),
         prefix: () => resolveShape(runtime.config).firstPrefix,
         ascii: () => runtime.config.icons === "ascii",
@@ -293,7 +298,7 @@ export class PromptExtension {
     runtime.ctx.ui.setFooter((tui, theme, footerData) => {
       runtime.tui = tui;
       runtime.footerData = footerData;
-      if (mode === "hidden") {
+      if (mode === "hidden" || mode === "inline") {
         return new EmptyFooter();
       }
       const footer = new PromptFooter(theme, {
@@ -410,13 +415,16 @@ export class PromptExtension {
     runtime.store.update({ runtime: { phase: "running", durationMs: elapsed, tokensPerSecond } });
   }
 
-  private renderStatus(runtime: Runtime, width: number): string {
+  private ensureTheme(runtime: Runtime): void {
     const theme = runtime.ctx.ui.theme;
-    if (runtime.theme !== theme) {
-      runtime.theme = theme;
-      runtime.uiTheme = fromPiTheme(theme);
-      runtime.themeVersion++;
-    }
+    if (runtime.theme === theme) return;
+    runtime.theme = theme;
+    runtime.uiTheme = fromPiTheme(theme);
+    runtime.themeVersion++;
+  }
+
+  private renderStatus(runtime: Runtime, width: number): string {
+    this.ensureTheme(runtime);
     const facts = runtime.store.get();
     const statuses = runtime.footerData?.getExtensionStatuses();
     const statusesKey = statuses
@@ -432,7 +440,10 @@ export class PromptExtension {
       hostname: runtime.hostname,
       home: process.env.HOME ?? process.env.USERPROFILE,
       now: Date.now(),
-      extensionStatuses: runtime.config.footerMode === "replace" ? statuses : undefined,
+      extensionStatuses:
+        runtime.config.footerMode === "replace" || runtime.config.footerMode === "inline"
+          ? statuses
+          : undefined,
     });
     const layout = layoutSegmentBar({
       width,
@@ -444,6 +455,39 @@ export class PromptExtension {
     });
     runtime.statusCache = { key, line: layout.line };
     return layout.line;
+  }
+
+  private renderMeta(runtime: Runtime, width: number): string | undefined {
+    if (runtime.config.footerMode !== "inline") return undefined;
+    this.ensureTheme(runtime);
+    const facts = runtime.store.get();
+    const statuses = runtime.footerData?.getExtensionStatuses();
+    const statusesKey = statuses
+      ? [...statuses.entries()].map(([key, value]) => `${key}=${value}`).sort().join("\u0000")
+      : "";
+    const key = `${width}|${facts.revision}|${runtime.configRevision}|${runtime.themeVersion}|${runtime.config.metaSegments.join(",")}|${statusesKey}`;
+    if (runtime.metaCache?.key === key) return runtime.metaCache.line;
+
+    const meta = buildMetaSegments({
+      facts,
+      config: runtime.config,
+      theme: runtime.uiTheme,
+      hostname: runtime.hostname,
+      home: process.env.HOME ?? process.env.USERPROFILE,
+      now: Date.now(),
+      extensionStatuses: statuses,
+    }, runtime.config.metaSegments);
+    const layout = layoutSegmentBar({
+      width,
+      left: meta.left,
+      right: meta.right,
+      separator: runtime.config.separator,
+      theme: runtime.uiTheme,
+    });
+
+    let line = alignMetaRow(layout.left, layout.right, width);
+    runtime.metaCache = { key, line };
+    return line;
   }
 
   private async command(args: string, ctx: ExtensionCommandContext): Promise<void> {

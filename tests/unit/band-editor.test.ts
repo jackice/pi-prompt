@@ -11,7 +11,12 @@ import { defaultConfig } from "../../src/config.ts";
 const config = defaultConfig("native");
 const shape = resolveShape(config);
 
-function createEditor(status = "φ > GPT high   2% ───────── 500K", rows = 24, prefix = "╰─ ") {
+function createEditor(
+  status = "φ > GPT high   2% ───────── 500K",
+  rows = 24,
+  prefix = "╰─ ",
+  meta?: string | (() => string),
+) {
   const tui = {
     terminal: { rows, columns: 80 },
     requestRender: () => {},
@@ -23,6 +28,9 @@ function createEditor(status = "φ > GPT high   2% ───────── 5
   const keybindings = { matches: () => false } as unknown as KeybindingsManager;
   return new BandEditor(tui, theme, keybindings, {
     renderStatus: () => status,
+    ...(meta === undefined
+      ? {}
+      : { renderMeta: typeof meta === "function" ? meta : () => meta }),
     shape: () => ({ ...shape, firstPrefix: prefix }),
     prefix: () => prefix,
     ascii: () => false,
@@ -79,6 +87,54 @@ describe("BandEditor", () => {
         }
       }
     }
+  });
+
+  it("meta 行占满 reserved 行，空闲共 3 行", () => {
+    const editor = createEditor("status", 24, "╰─ ", "~/dev/pi-prompt (develop)");
+    editor.setText("");
+    const rows = editor.render(60);
+    expect(rows).toHaveLength(3);
+    expect(rows[0]).toBe("status");
+    expect(rows[1]?.startsWith("╰─")).toBe(true);
+    expect(rows[2]).toBe("~/dev/pi-prompt (develop)");
+    expect(editor.getFrame()?.mapping[2]?.kind).toBe("meta");
+  });
+
+  it("点击 meta 行只聚焦，不移动正文光标", () => {
+    const editor = createEditor("status", 24, "╰─ ", "meta");
+    editor.setText("hello");
+    editor.render(40);
+    const result = editor.handleMouse(event({ x: 3, y: 2 }));
+    expect(result).toEqual({ handled: true, focus: true });
+    expect(editor.getCursor()).toEqual({ line: 0, col: 5 });
+  });
+
+  it("meta 渲染异常或换行时回退原生 render", () => {
+    const throwing = createEditor("status", 24, "╰─ ", () => {
+      throw new Error("boom");
+    });
+    throwing.setText("x");
+    expect(throwing.render(40)[0]).toBe("─".repeat(40));
+    expect(throwing.getFrame()).toBeUndefined();
+
+    const newline = createEditor("status", 24, "╰─ ", "line1\nline2");
+    newline.setText("x");
+    expect(newline.render(40)[0]).toBe("─".repeat(40));
+  });
+
+  it("meta 行不超出宿主宽度", () => {
+    const editor = createEditor("status", 24, "╰─ ", "x".repeat(100));
+    editor.setText("x");
+    const rows = editor.render(30);
+    for (const row of rows) {
+      expect(displayWidth(row)).toBeLessThanOrEqual(30);
+    }
+  });
+
+  it("无 meta 时保持 2 行", () => {
+    const editor = createEditor();
+    editor.setText("hello");
+    expect(editor.render(40)).toHaveLength(2);
   });
 
   it("长草稿滚动时显示一行合并隐藏计数", () => {

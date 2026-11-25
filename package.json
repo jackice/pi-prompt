@@ -1,6 +1,6 @@
 {
   "name": "@jackice/pi-prompt",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "OMP-style single-line status band and borderless composer for Pi, with native editor behaviour preserved.",
   "type": "module",
   "license": "MIT",

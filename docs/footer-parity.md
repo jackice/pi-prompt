@@ -49,17 +49,20 @@ pi-prompt 不调用 `setFooter`，`provider` 引用始终为 null。原生 foote
 - hidden：安装零行 `EmptyFooter`，不订阅分支变化。
 - 宿主 reload/switch 会先恢复内置 footer；pi-prompt 不会在运行时 `setFooter(undefined)` 盲清其他扩展的 footer。
 
-## 5. 自定义 footer 模式（0.1.1）
+## 5. 自定义 footer 模式（0.1.2）
 
 | 模式 | 行数 | 内容 | 恢复原生 |
 |---|---:|---|---|
 | `native` | 2–3 | Pi 内置 FooterComponent，字段最完整 | 无需操作 |
 | `compact` | 1 | path(branch) • 扩展/context/model/cost（0 隐藏） | `/reload` 或重启 |
 | `replace` | 2 | 第一行 path/branch/session；第二行 tokens/cache/cost/context/model | `/reload` 或重启 |
-| `hidden` | 0 | 零行 EmptyFooter | `/reload` 或重启 |
+| `hidden` | 0 | 零行 EmptyFooter；editor 保留行留白 | `/reload` 或重启 |
+| `inline` | 0 | 零行 EmptyFooter；editor 保留行显示 `metaSegments`（path/git/session/cost） | `/reload` 或重启 |
 
 - `compact`/`hidden` 沿用 native 的分段默认，不自动启用 Git/cost。
+- `inline` 沿用 native 分段默认，`metaSegments` 默认 `path/git/session/cost`；cost 需 `cost.enabled=true` 且有非零值才显示。
+- `inline` 的 meta 行位于输入/滚动之后、补全之前；右侧分组按宽度右对齐，窄宽逐级隐藏。
 - 三种自定义模式会替换原生 footer；不宣称字段等价。`replace` 仍是实验模式。
-- Pi 1.6.0 PTY 已验证：hidden 无 footer；compact 单行；切回 native 后 `/reload` 恢复内置 footer 两行。
+- Pi 1.6.0 PTY 已验证：hidden 无 footer；compact 单行；inline 空闲 3 行、无空白；切回 native 后 `/reload` 恢复内置 footer 两行。
 - 其他 Pi 版本或自定义 footer owner 场景仍以重启为安全回滚路径。
 

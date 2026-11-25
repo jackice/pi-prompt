@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.2
+
+- Add `footerMode=inline`: zero footer plus one `metaSegments` line inside Pi's reserved editor row. The composer stays 3 rows with no blank line.
+- Add `metaSegments` config with right-aligned SegmentBar rendering, priority truncation, and cost/git/session hiding rules.
+- Keep `hidden` and `compact` unchanged; `inline` is the recommended no-blank mode.
+- `/reload` restores the native footer in Pi 1.6.0; restart remains the safe fallback.
+- Add inline config/segment/frame/editor tests; 83 tests pass.
+
 ## 0.1.1
 
 - Add `footerMode=compact`: one custom footer line with path/branch, context, and model.

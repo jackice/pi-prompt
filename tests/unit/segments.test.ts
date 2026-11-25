@@ -2,7 +2,7 @@ import { plainTheme } from "@jackice/pi-ui";
 import { describe, expect, it } from "vitest";
 
 import { defaultConfig, type PromptConfig } from "../../src/config.ts";
-import { buildBandSegments } from "../../src/segments.ts";
+import { buildBandSegments, buildMetaSegments } from "../../src/segments.ts";
 import { createFacts, type PromptFacts } from "../../src/status/facts.ts";
 
 function facts(patch: Partial<PromptFacts> = {}): PromptFacts {
@@ -67,7 +67,7 @@ describe("band segments", () => {
   });
 
   it("成本区分 provider 计费与目录估算", () => {
-    const config = makeConfig({ segments: { left: [], right: ["cost"] } });
+    const config = makeConfig({ segments: { left: [], right: ["cost"] }, cost: { enabled: true } });
     const billed = build(config, facts({ usage: { costTotal: 0.125, costFromProvider: true, scope: "session_file" } }));
     expect(billed.right[0]?.full.text).toBe("$0.125");
     const estimate = build(config, facts({ usage: { costTotal: 0.125, costFromProvider: false, scope: "session_file" } }));
@@ -121,6 +121,48 @@ describe("band segments", () => {
     expect(named.left[0]?.full.text).toBe("status band");
     const unnamed = build(config, facts({ session: { cwd: "/x", id: "abcdef123456" } }));
     expect(unnamed.left[0]?.full.text).toBe("session abcdef12");
+  });
+
+  it("inline meta 按 builder 分组并隐藏缺失数据", () => {
+    const config = makeConfig({
+      footerMode: "inline",
+      metaSegments: ["path", "git", "session", "cost"],
+      cost: { enabled: true },
+    });
+    const built = buildMetaSegments(
+      {
+        ...base,
+        config,
+        facts: facts({
+          session: { cwd: "/Users/jackice/dev/pi-prompt", id: "abcdef123456" },
+          git: { branch: "develop", staged: 0, unstaged: 1, untracked: 0, stale: false },
+          usage: { costTotal: 0.42, costFromProvider: true, scope: "session_file" },
+        }),
+      },
+      config.metaSegments,
+    );
+    expect(built.left.map((segment) => segment.id)).toEqual(["path", "git", "session"]);
+    expect(built.right.map((segment) => segment.id)).toEqual(["cost"]);
+    expect(built.left[0]?.full.text).toBe("~/dev/pi-prompt");
+    expect(built.left[1]?.full.text).toBe("develop*");
+    expect(built.right[0]?.full.text).toBe("$0.420");
+  });
+
+  it("inline meta 在非 repo、cost 为零时只保留 path/session", () => {
+    const config = makeConfig({
+      footerMode: "inline",
+      metaSegments: ["path", "git", "session", "cost"],
+    });
+    const built = buildMetaSegments(
+      {
+        ...base,
+        config,
+        facts: facts({ session: { cwd: "/Users/jackice/dev/pi-prompt", id: "abcdef123456" }, usage: { costTotal: 0, costFromProvider: false, scope: "session_file" } }),
+      },
+      config.metaSegments,
+    );
+    expect(built.left.map((segment) => segment.id)).toEqual(["path", "session"]);
+    expect(built.right).toEqual([]);
   });
 
   it("time 段仅在显式配置或 clock 启用时出现", () => {

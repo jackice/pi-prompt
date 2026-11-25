@@ -6,6 +6,8 @@ import type { PromptShape } from "./shapes.ts";
 
 export interface BandEditorSource {
   renderStatus(width: number): string;
+  /** inline 模式的 editor 保留行；undefined 表示不占额外行。 */
+  renderMeta?(width: number): string | undefined;
   shape(): PromptShape;
   prefix(): string;
   ascii(): boolean;
@@ -100,12 +102,25 @@ export class BandEditor extends CustomEditor {
     }
     if (status.includes("\n") || status.includes("\r")) return super.render(width);
 
+    let meta: string | undefined;
+    if (this.source.renderMeta) {
+      try {
+        meta = this.source.renderMeta(width);
+      } catch {
+        return super.render(width);
+      }
+      if (meta !== undefined && (meta.includes("\n") || meta.includes("\r"))) {
+        return super.render(width);
+      }
+    }
+
     const frame = composeFrame({
       width,
       shape,
       prefix: choice.prefix,
       prefixWidth: choice.width,
       status,
+      ...(meta !== undefined ? { meta } : {}),
       capture: {
         inputs,
         completions,
@@ -128,7 +143,7 @@ export class BandEditor extends CustomEditor {
     const mapping = frame?.mapping[event.y];
     if (!frame || !mapping) return undefined;
 
-    if (mapping.kind === "status" || mapping.kind === "scroll") {
+    if (mapping.kind === "status" || mapping.kind === "scroll" || mapping.kind === "meta") {
       return event.type === "click" ? { handled: true, focus: true } : undefined;
     }
     if (mapping.kind === "input" && event.x < frame.prefixWidth) {

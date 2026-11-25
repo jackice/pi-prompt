@@ -30,7 +30,7 @@ export type SegmentId = keyof typeof SEGMENT_PRIORITIES;
 export type PromptShapeId = "band" | "borderless" | "native";
 export type SeparatorName = "ascii" | "pipe" | "slash" | "dot" | "none";
 export type IconMode = "unicode" | "ascii";
-export type FooterMode = "native" | "replace" | "compact" | "hidden";
+export type FooterMode = "native" | "replace" | "compact" | "hidden" | "inline";
 export type GitRefreshMode = "event" | "manual" | "poll";
 
 export interface PromptConfig {
@@ -43,6 +43,8 @@ export interface PromptConfig {
   brand: { text: string };
   footerMode: FooterMode;
   segments: { left: SegmentId[]; right: SegmentId[] };
+  /** inline 模式的 editor 第 3 行；不影响 native/compact/hidden/replace。 */
+  metaSegments: SegmentId[];
   extensionStatusKeys: Record<string, string>;
   context: {
     enabled: boolean;
@@ -79,6 +81,7 @@ const NATIVE_BASE: PromptConfig = {
   brand: { text: "φ" },
   footerMode: "native",
   segments: { left: ["brand", "model"], right: ["token_rate"] },
+  metaSegments: ["path", "git", "session", "cost"],
   extensionStatusKeys: {},
   context: { enabled: true, style: "embedded", warning: 70, critical: 90 },
   git: {
@@ -209,6 +212,37 @@ function parseSegments(
   return result;
 }
 
+function parseMetaSegments(
+  raw: unknown,
+  fallback: SegmentId[],
+  errors: string[],
+): SegmentId[] {
+  if (raw === undefined) return [...fallback];
+  if (!Array.isArray(raw)) {
+    errors.push("metaSegments 必须是字符串数组");
+    return [...fallback];
+  }
+  const seen = new Set<string>();
+  const result: SegmentId[] = [];
+  for (const item of raw) {
+    if (typeof item !== "string") {
+      errors.push("metaSegments 含非字符串项");
+      continue;
+    }
+    if (!(item in SEGMENT_PRIORITIES)) {
+      errors.push(`metaSegments 未知 segment: ${item}（已忽略）`);
+      continue;
+    }
+    if (seen.has(item)) {
+      errors.push(`metaSegments 重复 segment: ${item}（已忽略）`);
+      continue;
+    }
+    seen.add(item);
+    result.push(item as SegmentId);
+  }
+  return result;
+}
+
 function mergeBase(footerMode: FooterMode, raw: Record<string, unknown>, errors: string[]): PromptConfig {
   const config = defaultConfig(footerMode);
   const pick = <T extends object>(value: unknown, fallback: T): T =>
@@ -236,11 +270,12 @@ function mergeBase(footerMode: FooterMode, raw: Record<string, unknown>, errors:
       raw.footerMode === "native" ||
       raw.footerMode === "replace" ||
       raw.footerMode === "compact" ||
-      raw.footerMode === "hidden"
+      raw.footerMode === "hidden" ||
+      raw.footerMode === "inline"
     ) {
       config.footerMode = raw.footerMode;
     } else {
-      errors.push("footerMode 必须是 native|replace|compact|hidden");
+      errors.push("footerMode 必须是 native|replace|compact|hidden|inline");
     }
   }
   if (raw.prefix !== undefined) {
@@ -268,6 +303,7 @@ function mergeBase(footerMode: FooterMode, raw: Record<string, unknown>, errors:
     left: parseSegments(segments.left, config.segments.left, "left", seen, errors),
     right: parseSegments(segments.right, config.segments.right, "right", seen, errors),
   };
+  config.metaSegments = parseMetaSegments(raw.metaSegments, config.metaSegments, errors);
 
   if (raw.extensionStatusKeys !== undefined) {
     if (!isRecord(raw.extensionStatusKeys)) {
@@ -339,15 +375,18 @@ export function resolveConfig(raw: unknown): ResolvedConfig {
         ? "compact"
         : raw.footerMode === "hidden"
           ? "hidden"
-          : "native";
+          : raw.footerMode === "inline"
+            ? "inline"
+            : "native";
   if (
     raw.footerMode !== undefined &&
     raw.footerMode !== "native" &&
     raw.footerMode !== "replace" &&
     raw.footerMode !== "compact" &&
-    raw.footerMode !== "hidden"
+    raw.footerMode !== "hidden" &&
+    raw.footerMode !== "inline"
   ) {
-    errors.push("footerMode 必须是 native|replace|compact|hidden");
+    errors.push("footerMode 必须是 native|replace|compact|hidden|inline");
   }
   const config = mergeBase(footerMode, raw, errors);
   const hardError = errors.some((message) => !message.includes("（已忽略）"));

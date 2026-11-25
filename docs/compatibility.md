@@ -59,6 +59,8 @@
 | replace 模式 | 输出两行实验 footer；启动时明确 warning，未通过 parity |
 | hidden 模式 | 仅 band + 输入行，零 footer；启动 warning |
 | compact 模式 | 单行 `cwd • context • model`，无原生 footer |
+| inline 模式 | 3 行：status / input / `cwd > session`；无空白、无 footer |
+| inline 多行/补全 | 滚动行后接 meta；补全在 meta 之后；40 列时 meta 降级不溢出 |
 | custom → native | `/reload` 后恢复内置两行 footer（Pi 1.6.0） |
 
 ## 5. 未验证 / 风险

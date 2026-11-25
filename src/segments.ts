@@ -139,15 +139,13 @@ function aggregateStatuses(
   }, "muted");
 }
 
-export function buildBandSegments(input: SegmentBuildInput): BandSegments {
-  const { facts, config, theme } = input;
+function makeSegmentBuilders(input: SegmentBuildInput): Record<SegmentId, () => SegmentSpec | undefined> {
+  const { facts, config } = input;
   const statuses = input.extensionStatuses;
   const ascii = config.icons === "ascii";
-  const left: SegmentSpec[] = [];
-  const right: SegmentSpec[] = [];
   const model = modelName(facts);
 
-  const builders: Record<SegmentId, () => SegmentSpec | undefined> = {
+  return {
     brand: () => spec("brand", "left", { full: config.brand.text }, "accent"),
     hostname: () => {
       const host = input.hostname;
@@ -199,6 +197,7 @@ export function buildBandSegments(input: SegmentBuildInput): BandSegments {
       return spec("elapsed", "right", { full: seconds < 60 ? `${seconds.toFixed(1)}s` : `${Math.floor(seconds / 60)}m${Math.round(seconds % 60)}s` }, "muted");
     },
     cost: () => {
+      if (!config.cost.enabled) return undefined;
       const cost = facts.usage?.costTotal;
       if (cost === undefined || !Number.isFinite(cost) || cost <= 0) return undefined;
       const prefix = facts.usage?.costFromProvider ? "$" : ascii ? "~$" : "≈$";
@@ -214,6 +213,18 @@ export function buildBandSegments(input: SegmentBuildInput): BandSegments {
       return spec("time", config.segments.left.includes("time") ? "left" : "right", { full: `${hh}:${mm}` }, "muted");
     },
   };
+}
+
+function placed(spec: SegmentSpec | undefined, side: "left" | "right"): SegmentSpec | undefined {
+  return spec ? { ...spec, side } : undefined;
+}
+
+export function buildBandSegments(input: SegmentBuildInput): BandSegments {
+  const { facts, config, theme } = input;
+  const ascii = config.icons === "ascii";
+  const builders = makeSegmentBuilders(input);
+  const left: SegmentSpec[] = [];
+  const right: SegmentSpec[] = [];
 
   const leftIds = config.segments.left;
   const rightIds = [...config.segments.right];
@@ -226,16 +237,35 @@ export function buildBandSegments(input: SegmentBuildInput): BandSegments {
   }
 
   for (const id of leftIds) {
-    const built = builders[id]();
+    const built = placed(builders[id](), "left");
     if (built) left.push(built);
   }
   for (const id of rightIds) {
-    const built = builders[id]();
+    const built = placed(builders[id](), "right");
     if (built) right.push(built);
   }
 
   // workflow/subagents 状态可能来自扩展映射，但配置里没有 workflow/subagents 时不应偷偷显示。
   return { left, right, gauge: buildGauge(facts, config, theme, ascii) };
+}
+
+export interface MetaSegments {
+  left: SegmentSpec[];
+  right: SegmentSpec[];
+}
+
+/** inline 模式的 meta 行：按 id 顺序构造，保留 builder 自带的左右分组。 */
+export function buildMetaSegments(input: SegmentBuildInput, ids: readonly SegmentId[]): MetaSegments {
+  const builders = makeSegmentBuilders(input);
+  const left: SegmentSpec[] = [];
+  const right: SegmentSpec[] = [];
+  for (const id of ids) {
+    const built = builders[id]();
+    if (!built) continue;
+    if (built.side === "right") right.push(built);
+    else left.push(built);
+  }
+  return { left, right };
 }
 
 function buildGauge(

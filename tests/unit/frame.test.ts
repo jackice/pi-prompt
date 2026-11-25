@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { choosePrefix, composeFrame } from "../../src/composer/frame.ts";
+import { displayWidth } from "@jackice/pi-ui";
+
+import { alignMetaRow, choosePrefix, composeFrame } from "../../src/composer/frame.ts";
 import { resolveShape } from "../../src/composer/shapes.ts";
 import { defaultConfig } from "../../src/config.ts";
 
@@ -61,6 +63,90 @@ describe("composeFrame", () => {
     expect(frame?.mapping[2]).toEqual({ kind: "input", nativeY: 2, xOffset: 3 });
     expect(frame?.mapping[3]).toEqual({ kind: "completion", nativeY: 4, xOffset: 3 });
     expect(frame?.nativeHeight).toBe(5);
+  });
+
+  it("meta 右对齐并保持宽度", () => {
+    expect(alignMetaRow("left", "right", 20)).toBe(`left${" ".repeat(11)}right`);
+    expect(alignMetaRow("", "right", 10)).toBe("     right");
+    expect(alignMetaRow("left", "", 10)).toBe("left");
+    expect(displayWidth(alignMetaRow("l".repeat(20), "r".repeat(20), 10))).toBeLessThanOrEqual(10);
+  });
+
+  it("meta 行位于输入之后", () => {
+    const frame = composeFrame({
+      width: 40,
+      shape: band,
+      prefix: "╰─ ",
+      prefixWidth: 3,
+      status: "status",
+      meta: "~/dev/pi-prompt (develop)",
+      capture: capture(["hello"]),
+      ascii: false,
+    });
+    expect(frame?.rows).toEqual(["status", "╰─ hello", "~/dev/pi-prompt (develop)"]);
+    expect(frame?.mapping.map((row) => row.kind)).toEqual(["status", "input", "meta"]);
+  });
+
+  it("meta 在 scroll 之后、completion 之前，补全 nativeY 不变", () => {
+    const frame = composeFrame({
+      width: 40,
+      shape: band,
+      prefix: "╰─ ",
+      prefixWidth: 3,
+      status: "status",
+      meta: "meta",
+      capture: capture(["input"], ["done"], 2, 3),
+      ascii: false,
+    });
+    expect(frame?.rows).toEqual(["status", "╰─ input", "   ↑2 ↓3", "meta", "   done"]);
+    expect(frame?.mapping.map((row) => row.kind)).toEqual(["status", "input", "scroll", "meta", "completion"]);
+    expect(frame?.mapping[4]).toEqual({ kind: "completion", nativeY: 3, xOffset: 3 });
+  });
+
+  it("borderless 时 meta 位于 status 之后", () => {
+    const shape = resolveShape({ ...defaultConfig("native"), shape: "borderless" });
+    const frame = composeFrame({
+      width: 40,
+      shape,
+      prefix: "❯ ",
+      prefixWidth: 2,
+      status: "status",
+      meta: "meta",
+      capture: capture(["hi"], ["comp"]),
+      ascii: false,
+    });
+    expect(frame?.rows).toEqual(["❯ hi", "status", "meta", "  comp"]);
+    expect(frame?.mapping.map((row) => row.kind)).toEqual(["input", "status", "meta", "completion"]);
+  });
+
+  it("meta 超宽被截断而不是整帧回退", () => {
+    const frame = composeFrame({
+      width: 10,
+      shape: band,
+      prefix: "",
+      prefixWidth: 0,
+      status: "s",
+      meta: "this meta line is far too long",
+      capture: capture(["x"]),
+      ascii: false,
+    });
+    expect(frame).toBeDefined();
+    const metaRow = frame?.rows[2] ?? "";
+    expect(displayWidth(metaRow)).toBeLessThanOrEqual(10);
+  });
+
+  it("无 meta 时行顺序保持原样", () => {
+    const frame = composeFrame({
+      width: 40,
+      shape: band,
+      prefix: "> ",
+      prefixWidth: 2,
+      status: "status",
+      capture: capture(["input"]),
+      ascii: false,
+    });
+    expect(frame?.rows).toEqual(["status", "> input"]);
+    expect(frame?.mapping.map((row) => row.kind)).toEqual(["status", "input"]);
   });
 
   it("有隐藏行时插入一行 scroll，且补全 nativeY 随之下移", () => {

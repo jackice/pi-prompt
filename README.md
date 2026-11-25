@@ -11,7 +11,7 @@ An OMP-style single-line status band and borderless prompt area for Pi, while pr
 
 - The band is exactly one line; normal input no longer has top/bottom borders.
 - Cursor, autocomplete, history, undo, paste, attachments, IME, and mouse coordinates stay in the native `Editor`.
-- `footerMode=native` by default: `setFooter` is never called and the native 2–3 line footer is kept intact.
+- `footerMode=native` by default: `setFooter` is never called and the native 2–3 line footer is kept intact. `footerMode=inline` removes the footer and reuses Pi's reserved editor row for one meta line, keeping the composer at 3 rows with no blank line.
 - The default Native Compact layout shows only brand, model/thinking, the context gauge, and a trustworthy live token rate.
 
 ## Compatibility
@@ -51,6 +51,7 @@ The default config path is `${PI_CODING_AGENT_DIR:-~/.pi/agent}/pi-prompt.json`.
     "left": ["brand", "model"],
     "right": ["token_rate"]
   },
+  "metaSegments": ["path", "git", "session", "cost"],
   "context": { "enabled": true, "style": "embedded", "warning": 70, "critical": 90 },
   "git": {
     "enabled": false,
@@ -65,7 +66,7 @@ The default config path is `${PI_CODING_AGENT_DIR:-~/.pi/agent}/pi-prompt.json`.
 ```
 
 - `shape`: `band`, `native`, or `borderless`. `native` installs no custom editor or footer.
-- `footerMode`: `native` keeps Pi's built-in 2–3 line footer; `compact` replaces it with one custom line; `replace` uses two custom lines and remains experimental; `hidden` removes the footer entirely. In Pi 1.6.0, `/reload` restores the native footer after a mode change; restarting Pi is the safe fallback.
+- `footerMode`: `native` keeps Pi's built-in 2–3 line footer; `compact` replaces it with one custom line; `replace` uses two custom lines and remains experimental; `hidden` removes the footer entirely; `inline` removes the footer and puts one `metaSegments` line into the editor row Pi already reserves, so the composer stays 3 rows with no blank line. In Pi 1.6.0, `/reload` restores the native footer after a mode change; restarting Pi is the safe fallback.
 - With `icons=ascii`, the prefix and brand must be ASCII; separators and gauge use ASCII glyphs.
 - `footerMode=replace` is still experimental and requires a separate parity review. It is disabled by default for production use.
 - Data sources that are not listed in `segments` are not collected. The Git provider only starts when a `git` segment is configured or `git.enabled=true`.
@@ -115,7 +116,7 @@ The default config path is `${PI_CODING_AGENT_DIR:-~/.pi/agent}/pi-prompt.json`.
 ## Known limitations
 
 - `footerMode=replace` has not passed field-by-field parity with the native footer. Missing fields include `(auto)`, CH%, routed model/effort, `xp`, and `(sub)`. The mode is off by default and must not be described as equivalent.
-- `footerMode=compact` intentionally drops token counts and the native `(auto)`/`(sub)`/CH%/routed-model fields to fit one line. `footerMode=hidden` removes the footer completely; add `path`/`git`/token segments to the band if you still need that data.
+- `footerMode=compact` intentionally drops token counts and the native `(auto)`/`(sub)`/CH%/routed-model fields to fit one line. `footerMode=hidden` leaves Pi's reserved editor row blank; use `footerMode=inline` to fill it with `metaSegments` without adding height.
 - Real CJK IME, wide characters, and mouse selection still need manual Ghostty/tmux verification. PTY smoke tests cover normal input, multi-line drafts, scrolling, presets, reload, and narrow/wide resizes.
 - External Git changes do not trigger a refresh by themselves.
 - Legacy Powerline extras such as queue, stash, sticky bash, delayed send, and welcome are not implemented.
